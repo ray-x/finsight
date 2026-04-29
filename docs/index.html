@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>finsight — Terminal Stock Market Watchlist</title>
+  <meta name="description" content="A terminal-based stock market watchlist and charting tool built with Go. Candlestick charts, financials, analyst data, and more — all in your terminal.">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --bg-card: #161b22;
+      --border: #30363d;
+      --text: #c9d1d9;
+      --text-dim: #8b949e;
+      --accent: #58a6ff;
+      --green: #3fb950;
+      --red: #f85149;
+      --yellow: #d29922;
+      --purple: #bc8cff;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Hero */
+    .hero {
+      text-align: center;
+      padding: 80px 0 60px;
+    }
+
+    .hero h1 {
+      font-size: 3rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+    }
+
+    .hero h1 .accent { color: var(--green); }
+
+    .hero .tagline {
+      font-size: 1.25rem;
+      color: var(--text-dim);
+      max-width: 600px;
+      margin: 0 auto 32px;
+    }
+
+    .hero .pitch {
+      max-width: 760px;
+      margin: 0 auto 28px;
+      font-size: 1rem;
+      color: var(--text);
+    }
+
+    .hero-badges {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 32px;
+    }
+
+    .hero-badges img { height: 20px; }
+
+    .cta-group {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+
+    .btn-primary {
+      background: var(--green);
+      color: #0d1117;
+    }
+
+    .btn-secondary {
+      background: var(--bg-card);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    /* Terminal preview */
+    .terminal {
+      background: #0a0e14;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin: 40px 0;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    }
+
+    .terminal-bar {
+      background: #1a1e24;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .terminal-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+
+    .terminal-dot.r { background: var(--red); }
+    .terminal-dot.y { background: var(--yellow); }
+    .terminal-dot.g { background: var(--green); }
+
+    .terminal-title {
+      flex: 1;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 0.85rem;
+    }
+
+    .terminal-body {
+      padding: 20px 24px;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Menlo, monospace;
+      font-size: 0.85rem;
+      line-height: 1.5;
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    .t-green { color: var(--green); }
+    .t-red { color: var(--red); }
+    .t-yellow { color: var(--yellow); }
+    .t-blue { color: var(--accent); }
+    .t-dim { color: var(--text-dim); }
+    .t-white { color: #fff; font-weight: bold; }
+    .t-purple { color: var(--purple); }
+
+    /* Sections */
+    section {
+      padding: 60px 0;
+    }
+
+    section h2 {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+      letter-spacing: -0.01em;
+    }
+
+    section h2 .accent { color: var(--accent); }
+
+    section .subtitle {
+      color: var(--text-dim);
+      font-size: 1.1rem;
+      margin-bottom: 36px;
+    }
+
+    /* Feature grid */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+    }
+
+    .feature-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      transition: border-color 0.2s;
+    }
+
+    .feature-card:hover { border-color: var(--accent); }
+
+    .feature-icon {
+      font-size: 1.5rem;
+      margin-bottom: 12px;
+    }
+
+    .feature-card h3 {
+      font-size: 1.1rem;
+      margin-bottom: 8px;
+    }
+
+    .feature-card p {
+      color: var(--text-dim);
+      font-size: 0.95rem;
+    }
+
+    /* Install */
+    .install-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+    }
+
+    .install-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+    }
+
+    .install-card h3 {
+      font-size: 1rem;
+      margin-bottom: 12px;
+      color: var(--accent);
+    }
+
+    .install-card code {
+      display: block;
+      background: #0a0e14;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-family: 'SF Mono', 'Fira Code', Menlo, monospace;
+      font-size: 0.85rem;
+      color: var(--green);
+      overflow-x: auto;
+    }
+
+    /* Keybindings */
+    .keys-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+    }
+
+    .key-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    kbd {
+      display: inline-block;
+      padding: 2px 8px;
+      background: #0a0e14;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: 'SF Mono', Menlo, monospace;
+      font-size: 0.8rem;
+      color: var(--accent);
+      white-space: nowrap;
+    }
+
+    .key-desc {
+      color: var(--text-dim);
+      font-size: 0.9rem;
+    }
+
+    /* Platforms */
+    .platforms {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+
+    @media (max-width: 640px) {
+      .platforms { grid-template-columns: 1fr; }
+    }
+
+    .platform-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      text-align: center;
+    }
+
+    .platform-card .icon { font-size: 2rem; margin-bottom: 8px; }
+    .platform-card h3 { font-size: 1rem; margin-bottom: 4px; }
+    .platform-card p { color: var(--text-dim); font-size: 0.85rem; }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 32px 0;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 0.9rem;
+    }
+
+    footer a { color: var(--accent); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    /* Divider */
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Hero -->
+  <div class="container">
+    <section class="hero">
+      <h1><span class="accent">◆</span> finsight</h1>
+      <p class="tagline">A terminal-based stock market watchlist and charting tool. Real-time quotes, candlestick charts, financials, analyst data — all in your terminal.</p>
+      <p class="pitch"><strong>Elevator pitch:</strong> Finsight is your terminal market cockpit, combining real-time watchlists, multi-timeframe charting, financial and holder data, and AI-powered insights in a fast, keyboard-driven workflow. </p>
+
+      <div class="hero-badges">
+        <a href="https://github.com/ray-x/finsight/actions/workflows/ci.yml"><img src="https://github.com/ray-x/finsight/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+        <a href="https://github.com/ray-x/finsight/releases"><img src="https://img.shields.io/github/v/release/ray-x/finsight?color=3fb950" alt="Release"></a>
+        <a href="https://goreportcard.com/report/github.com/ray-x/finsight"><img src="https://goreportcard.com/badge/github.com/ray-x/finsight" alt="Go Report"></a>
+      </div>
+
+      <div class="cta-group">
+        <a href="https://github.com/ray-x/finsight/releases" class="btn btn-primary">↓ Download</a>
+        <a href="https://github.com/ray-x/finsight" class="btn btn-secondary">GitHub →</a>
+      </div>
+    </section>
+
+    <!-- Terminal Preview -->
+    <div class="terminal">
+      <div class="terminal-bar">
+        <span class="terminal-dot r"></span>
+        <span class="terminal-dot y"></span>
+        <span class="terminal-dot g"></span>
+        <span class="terminal-title">finsight</span>
+        <span></span>
+      </div>
+      <div class="terminal-body"><span class="t-blue"> ◆ finsight</span>                    <span class="t-dim">1D  1W  1M  6M  1Y  3Y  5Y  10Y</span>
+
+ <span class="t-white">[1:Index &amp; ETF]</span>  <span class="t-dim">2:Tech  3:Asia</span>
+ <span class="t-white">Symbol       Trend         Price      Change     Chg%      Mkt Cap</span>
+ <span class="t-dim">────────────────────────────────────────────────────────────────────</span>
+ <span class="t-white">NVDA</span>    <span class="t-green">▁▂▃▃▄▅▆▇▇█</span>   <span class="t-white">$131.28</span>   <span class="t-green">+$3.42</span>   <span class="t-green">+2.68%</span>    <span class="t-dim">3.21T</span>
+ <span class="t-white">AAPL</span>    <span class="t-red">█▇▆▅▅▄▃▃▂▁</span>   <span class="t-white">$198.15</span>   <span class="t-red">-$1.23</span>   <span class="t-red">-0.62%</span>    <span class="t-dim">3.05T</span>
+ <span class="t-white">MSFT</span>    <span class="t-green">▃▃▄▄▅▅▆▆▇█</span>   <span class="t-white">$425.52</span>   <span class="t-green">+$5.18</span>   <span class="t-green">+1.23%</span>    <span class="t-dim">3.16T</span>
+ <span class="t-white">TSLA</span>    <span class="t-green">▁▃▅▃▅▇▅▇▆█</span>   <span class="t-white">$248.42</span>   <span class="t-green">+$8.67</span>   <span class="t-green">+3.62%</span>    <span class="t-dim">795B</span>
+ <span class="t-white">AMD</span>     <span class="t-red">▇▆▆▅▅▄▃▃▂▁</span>   <span class="t-white">$119.80</span>   <span class="t-red">-$2.15</span>   <span class="t-red">-1.76%</span>    <span class="t-dim">194B</span>
+ <span class="t-white">^IXIC</span>   <span class="t-green">▃▄▅▄▅▆▅▆▇█</span>  <span class="t-white">$18,342</span>   <span class="t-green">+$124</span>   <span class="t-green">+0.68%</span>      <span class="t-dim">—</span>
+
+ <span class="t-dim">↑↓ navigate  ←→ timeframe  1-9 group  Enter detail  / search  ? help</span></div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- Features -->
+  <div class="container">
+    <section>
+      <h2>Features</h2>
+      <p class="subtitle">Everything you need to track the markets without leaving your terminal.</p>
+
+      <div class="features">
+        <div class="feature-card">
+          <div class="feature-icon">📊</div>
+          <h3>Candlestick Charts</h3>
+          <p>Braille-dot OHLC candlesticks with wicks, volume bars, and axis labels. Three chart styles to choose from.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">⏱</div>
+          <h3>8 Timeframes</h3>
+          <p>Switch between 1D, 1W, 1M, 6M, 1Y, 3Y, 5Y, and 10Y with a single keypress. Charts adapt automatically.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">💰</div>
+          <h3>Financials</h3>
+          <p>Revenue vs Earnings charts, key metrics, balance sheet, EPS trend, and valuation ratios (EV, P/S, EV/EBITDA).</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📈</div>
+          <h3>Analyst Data</h3>
+          <p>Price targets with upside/downside, consensus ratings, and a stacked recommendation trend chart.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🏛</div>
+          <h3>Holders</h3>
+          <p>Institutional ownership breakdown with visual bars, top institutional holders, and insider holdings.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔗</div>
+          <h3>Related Symbols</h3>
+          <p>Auto-discovered similar stocks shown with sparkline charts synced to your current timeframe.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔍</div>
+          <h3>Symbol Search</h3>
+          <p>Search Yahoo Finance with live preview sparklines. Add to your watchlist with Enter.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🌙</div>
+          <h3>Extended Hours</h3>
+          <p>Pre-market and post-market pricing displayed when regular markets are closed.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">⚡</div>
+          <h3>Local Cache</h3>
+          <p>15-min TTL for quotes and charts, 24-hour TTL for financials. Offline fallback with stale cache.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🧠</div>
+          <h3>AI Command Window</h3>
+          <p>Press <code>a</code> to open an interactive prompt. Embed slash macros like <code>/symbol:NVDA</code>, <code>/range:1M</code>, <code>/earning:AAPL</code>, <code>/news:TSLA</code>, <code>/portfolio</code> to inject structured context. Missing earnings and news data are auto-fetched on demand (news merges Yahoo Finance + Google News RSS). Output is rendered as markdown with tables. Works with OpenAI, <strong>GitHub Copilot</strong> (personal / Business / Enterprise), and <strong>Google Vertex AI</strong>.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📂</div>
+          <h3>Watchlist Groups</h3>
+          <p>Organize symbols into named groups like “Tech”, “Index & ETF”, “Asia”. Switch instantly with number keys 1–9.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">💼</div>
+          <h3>Portfolio</h3>
+          <p>Track real positions with live market value, daily and unrealized P/L. Press <code>a</code> to launch the AI Command window pre-seeded with the selected holding and your full portfolio context, or <code>A</code> for a holistic review. Stored privately in <code>~/.config/finsight/portfolio.yaml</code> with <code>0600</code> permissions.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🎨</div>
+          <h3>Color Schemes</h3>
+          <p>8 built-in themes: Default, TokyoNight, Catppuccin, Dracula, Nord, Gruvbox, Solarized, and ANSI 16-color.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <hr class="divider">
+
+  <!-- Install -->
+  <div class="container">
+    <section>
+      <h2>Install</h2>
+      <p class="subtitle">Get up and running in seconds.</p>
+
+      <div class="install-grid">
+        <div class="install-card">
+          <h3>Go Install</h3>
+          <code>go install github.com/ray-x/finsight@latest</code>
+        </div>
+        <div class="install-card">
+          <h3>Build from Source</h3>
+          <code>git clone https://github.com/ray-x/finsight.git
+cd finsight
+go build -o finsight .</code>
+        </div>
+        <div class="install-card">
+          <h3>Download Binary</h3>
+          <code><a href="https://github.com/ray-x/finsight/releases" style="color: var(--green); text-decoration: none;">→ github.com/ray-x/finsight/releases</a></code>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <hr class="divider">
+
+  <!-- Platforms -->
+  <div class="container">
+    <section>
+      <h2><span class="accent">Cross-platform</span> builds</h2>
+      <p class="subtitle">Pre-built binaries for every major platform.</p>
+
+      <div class="platforms">
+        <div class="platform-card">
+          <div class="icon">🍎</div>
+          <h3>macOS</h3>
+          <p>ARM64 (Apple Silicon)</p>
+        </div>
+        <div class="platform-card">
+          <div class="icon">🐧</div>
+          <h3>Linux</h3>
+          <p>x86_64 (AMD64)</p>
+        </div>
+        <div class="platform-card">
+          <div class="icon">🪟</div>
+          <h3>Windows</h3>
+          <p>x86_64 (AMD64)</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <hr class="divider">
+
+  <!-- Keybindings -->
+  <div class="container">
+    <section>
+      <h2>Keybindings</h2>
+      <p class="subtitle">Vim-inspired navigation. Everything is a keypress away.</p>
+
+      <div class="keys-grid">
+        <div class="key-item"><kbd>↑ k</kbd> <span class="key-desc">Move up</span></div>
+        <div class="key-item"><kbd>↓ j</kbd> <span class="key-desc">Move down</span></div>
+        <div class="key-item"><kbd>← →</kbd> <span class="key-desc">Timeframe</span></div>
+        <div class="key-item"><kbd>Enter</kbd> <span class="key-desc">Detail view</span></div>
+        <div class="key-item"><kbd>1-9</kbd> <span class="key-desc">Switch group</span></div>
+        <div class="key-item"><kbd>[ ]</kbd> <span class="key-desc">Prev/next symbol</span></div>
+        <div class="key-item"><kbd>m</kbd> <span class="key-desc">Market data popup</span></div>
+        <div class="key-item"><kbd>a</kbd> <span class="key-desc">AI Command window</span></div>
+        <div class="key-item"><kbd>e</kbd> <span class="key-desc">Earnings report</span></div>
+        <div class="key-item"><kbd>p</kbd> <span class="key-desc">Portfolio view</span></div>
+        <div class="key-item"><kbd>/</kbd> <span class="key-desc">Search</span></div>
+        <div class="key-item"><kbd>s</kbd> <span class="key-desc">Sort</span></div>
+        <div class="key-item"><kbd>d x</kbd> <span class="key-desc">Remove symbol</span></div>
+        <div class="key-item"><kbd>r</kbd> <span class="key-desc">Refresh</span></div>
+        <div class="key-item"><kbd>R</kbd> <span class="key-desc">Refresh AI (no cache)</span></div>
+        <div class="key-item"><kbd>Tab 1-3</kbd> <span class="key-desc">Switch popup tabs</span></div>
+        <div class="key-item"><kbd>?</kbd> <span class="key-desc">Help</span></div>
+      </div>
+    </section>
+  </div>
+
+  <hr class="divider">
+
+  <!-- Data Source -->
+  <div class="container">
+    <section style="text-align: center;">
+      <h2>Powered by <span class="accent">Yahoo Finance</span> &amp; <span class="accent">AI</span></h2>
+      <p class="subtitle">Real-time quotes, historical charts, financial statements, analyst recommendations, institutional holdings, related symbol suggestions, and AI-powered analysis via OpenAI, GitHub Copilot, or Google Vertex AI.</p>
+    </section>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <p>
+        <a href="https://github.com/ray-x/finsight">GitHub</a> ·
+        <a href="https://github.com/ray-x/finsight/releases">Releases</a> ·
+        <a href="https://github.com/ray-x/finsight/blob/main/LICENSE">Apache NON-AI License 2.0</a>
+      </p>
+      <p style="font-size: 0.75rem; margin-top: 0.5rem; opacity: 0.7;">
+        <strong>Disclaimer:</strong> This is a personal project for informational and educational purposes only. It is not financial advice. The author assumes no responsibility for any investment decisions or financial losses. AI-generated analysis may contain inaccuracies. Use at your own risk.
+      </p>
+    </div>
+  </footer>
+
+</body>
+</html>

@@ -1,0 +1,135 @@
+refresh_interval: 900
+chart_range: 1d
+chart_interval: 1h
+chart_style: candlestick_dotted
+colorscheme: nord
+edgar_email: rayx.cn@gmail.com
+log_file: /Users/rayxu/tmp/finsight.log
+earnings:
+    source_priority:
+        - edgar
+        - yahoo
+        - company_ir
+    ir_page_registry:
+        AAPL: https://www.apple.com/newsroom/
+        GOOG: https://blog.google/inside-google/company-announcements/
+        MSFT: https://news.microsoft.com/category/earnings/
+        NVDA: https://nvidianews.nvidia.com/
+        TSM: https://pr.tsmc.com/english
+    search_hints:
+        AAPL: Apple earnings report investor relations PDF
+        GOOG: Alphabet earnings release investor relations PDF
+        MSFT: Microsoft earnings release investor relations PDF
+        NVDA: NVIDIA earnings release investor relations PDF
+        TSM: TSMC earnings release investor relations PDF
+    high_freq_polling_seconds: 60
+    normal_polling_seconds: 300
+    off_hours_polling_seconds: 900
+    window_before_minutes: 120
+    window_after_minutes: 120
+    edgar_confirm_seconds: 120
+    edgar_confirm_duration_mins: 30
+    yahoo_backfill_seconds: 900
+    yahoo_backfill_duration_mins: 240
+llm:
+    provider: copilot
+    endpoint: ""
+    model: gpt-4o
+    api_key_env: ""
+    project: ""
+    location: ""
+    context_tokens: 65536
+    use_multi_agent: false
+investor:
+    strategies:
+        - buy-and-hold
+        - dca
+        - growth
+    risk: balanced
+    horizon: 10+ years
+    goals:
+        - long-term capital appreciation
+        - diversified across sectors
+watchlists:
+    - name: Index & ETF
+      symbols:
+        - symbol: ^IXIC
+          name: NASDAQ Composite
+        - symbol: IKO.AX
+          name: ISHMCISK ETF UNITS [IKO]
+        - symbol: QQQ
+          name: Invesco QQQ Trust, Series 1
+        - symbol: SPY
+          name: State Street SPDR S&P 500 ETF T
+    - name: Tech
+      symbols:
+        - symbol: AMD
+          name: Advanced Micro Devices, Inc.
+        - symbol: MU
+          name: Micron Technology, Inc.
+        - symbol: TSM
+          name: Taiwan Semiconductor Manufacturing Company Limited
+        - symbol: ASML
+          name: ASML Holding N.V. - New York Re
+        - symbol: GOOG
+          name: Alphabet Inc.
+        - symbol: GOOGL
+          name: GOOGL
+        - symbol: NVDA
+          name: NVDA
+    - name: Asia
+      symbols:
+        - symbol: 005930.KS
+          name: Samsung
+        - symbol: 000660.KS
+          name: SK hynix
+        - symbol: 8058.T
+          name: MITSUBISHI CORP
+    - name: Crypto
+      symbols:
+        - symbol: BTC-USD
+          name: Bitcoin
+        - symbol: ETH-USD
+          name: Ethereum USD
+    - name: Comex
+      symbols:
+        - symbol: GOLD
+          name: Gold Jun 26 (GC=F)
+        - symbol: SI=F
+          name: Silver May 26
+    - name: Forex
+      symbols:
+        - symbol: EURUSD=X
+          name: EUR/USD
+        - symbol: JPY=X
+          name: USD/JPY
+
+# ── ACP (Agent Client Protocol) ──────────────────────────────────────────────
+# Launch AI coding agents as subprocesses and communicate via ACP over stdio.
+# Supports gemini-cli, copilot-cli (gh copilot), claude-code, etc.
+# Each entry spawns one agent process; prompts are routed by name.
+#
+# acp:
+#   - name: gemini           # human-readable name used in Prompt(ctx, "gemini", ...)
+#     command: gemini         # executable path
+#     args: ["--acp"]        # CLI flags to enable ACP mode
+#     env: []                # optional extra KEY=VALUE environment variables
+#   - name: copilot
+#     command: gh
+#     args: ["copilot", "--acp"]
+#   - name: claude
+#     command: claude
+#     args: ["--acp"]
+
+# ── Copilot SDK (native Go integration) ──────────────────────────────────────
+# Uses the official github.com/github/copilot-sdk/go to communicate with the
+# GitHub Copilot CLI. Richer than ACP: supports model selection, system message
+# customisation, streaming, tools, and permission control.
+# Requires the `copilot` CLI to be installed (or set cli_path).
+# Auth: uses the logged-in GitHub user by default (gh auth login).
+#
+# copilot_sdk:
+#   cli_path: ""                  # path to copilot CLI (default: auto-detect via PATH / COPILOT_CLI_PATH)
+#   model: "gpt-5"               # model id (gpt-5, claude-sonnet-4.5, etc.)
+#   system_message: "Focus on financial analysis. Always cite data sources."
+#   env: []                       # extra env vars for the CLI subprocess
