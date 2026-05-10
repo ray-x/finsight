@@ -8,8 +8,6 @@ Finsight is a terminal-native market workstation for tracking symbols, reviewing
 
 <img width="1200"  alt="image" src="https://gist.github.com/user-attachments/assets/de53fe89-8bfb-4eee-9bc3-d8f64a3670f1.jpeg" />
 
-<img width="1200"  alt="image" src="https://gist.github.com/user-attachments/assets/24be820a-d7d5-436d-8ad4-055c6ae7b834.png" />
-
 Built with Go on top of [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss), it combines a fast TUI with local caching, SQLite persistence, multi-provider LLM support, and an agentic prompt flow that can pull quotes, technicals, earnings, news, and portfolio context on demand.
 
 ## Application highlights
