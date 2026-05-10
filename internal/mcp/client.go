@@ -59,6 +59,9 @@ func (c *Client) Connect(ctx context.Context, configs []ServerConfig) error {
 		if cfg.Command == "" && cfg.URL == "" {
 			continue
 		}
+		if cfg.URL != "" {
+			return fmt.Errorf("mcp: SSE/URL transport is not implemented for server %q", cfg.Name)
+		}
 		conn, err := c.connectStdio(ctx, cfg)
 		if err != nil {
 			logger.Log("mcp: failed to connect to %s: %v", cfg.Name, err)

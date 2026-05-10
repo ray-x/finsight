@@ -190,6 +190,15 @@ const (
 	maModeCount
 )
 
+// TechnicalOverlayMode selects which overlay family to draw on the
+// detail chart while technical view is enabled.
+type TechnicalOverlayMode int
+
+const (
+	TechnicalOverlayMA TechnicalOverlayMode = iota
+	TechnicalOverlayBollinger
+)
+
 // Label returns a short human label for the current preset.
 func (m MAMode) Label() string {
 	switch m {
@@ -253,6 +262,7 @@ type keyMap struct {
 	RefreshAll  key.Binding
 	ChartStyle  key.Binding
 	MAMode      key.Binding
+	Bollinger   key.Binding
 }
 
 var keys = keyMap{
@@ -277,6 +287,7 @@ var keys = keyMap{
 	RefreshAll:  key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "refresh all")),
 	ChartStyle:  key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "cycle chart style")),
 	MAMode:      key.NewBinding(key.WithKeys("M"), key.WithHelp("M", "cycle MA preset")),
+	Bollinger:   key.NewBinding(key.WithKeys("B"), key.WithHelp("B", "toggle BB/MA overlays")),
 }
 
 var portfolioKeys = struct {
@@ -357,6 +368,10 @@ type Model struct {
 	// Cycled with the "M" key.
 	maMode MAMode
 
+	// Active overlay family for detail chart technical overlays.
+	// B toggles between EMA/SMA overlays and Bollinger overlays.
+	technicalOverlayMode TechnicalOverlayMode
+
 	// Watchlist summary
 	summaryText    string
 	summaryGroup   int // which group the summary is for
@@ -415,7 +430,8 @@ type portfolioFormState struct {
 	name      string
 	posField  string
 	openField string
-	focus     int // 0 = position, 1 = open price
+	dateField string
+	focus     int // 0 = quantity, 1 = open price, 2 = bought date
 	err       string
 }
 
@@ -834,7 +850,7 @@ func (m Model) viewDetail() string {
 		chartHeight -= 2 // room for compare legend
 	}
 	if m.showTechnicals {
-		chartHeight -= 4 // room for technicals panel (MA, BB, RSI/Stoch, Pivot)
+		chartHeight -= 5 // room for technicals panel (MA, BB, BB strategy, RSI/Stoch, Pivot)
 	}
 	if chartHeight < 5 {
 		chartHeight = 5
@@ -844,7 +860,7 @@ func (m Model) viewDetail() string {
 	if m.compareSymbol != nil && m.compareSymbol.ChartData != nil && item.ChartData != nil {
 		chartView = m.renderCompareChart(item, chartHeight)
 	} else {
-		chartView = RenderDetailChart(item, m.width, chartHeight, m.currentTimeframe().Label, m.cfg.ChartStyle, m.showTechnicals, m.maMode)
+		chartView = RenderDetailChart(item, m.width, chartHeight, m.currentTimeframe().Label, m.cfg.ChartStyle, m.showTechnicals, m.maMode, m.technicalOverlayMode)
 	}
 
 	marketStatus := renderMarketStatus(item.Quote)
@@ -858,6 +874,7 @@ func (m Model) viewDetail() string {
 		hintKey("t", "echnicals  ")
 	if m.showTechnicals {
 		helpParts += helpKeyStyle.Render("M") + " MA preset  "
+		helpParts += helpKeyStyle.Render("B") + " BB/MA overlays  "
 	}
 	if m.tempDetailActive && m.tempDetailSymbol == item.Symbol {
 		helpParts += hintKey("w", "atchlist  ")
@@ -2954,6 +2971,14 @@ func (m Model) handleDetailKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.cycleChartStyle()
 	case key.Matches(msg, keys.MAMode):
 		m.maMode = (m.maMode + 1) % maModeCount
+	case key.Matches(msg, keys.Bollinger):
+		if m.showTechnicals {
+			if m.technicalOverlayMode == TechnicalOverlayBollinger {
+				m.technicalOverlayMode = TechnicalOverlayMA
+			} else {
+				m.technicalOverlayMode = TechnicalOverlayBollinger
+			}
+		}
 	case msg.String() == "t":
 		m.showTechnicals = !m.showTechnicals
 		// Lazy-fetch a same-resolution backfill so intraday indicators
@@ -3052,14 +3077,7 @@ func (m Model) handleHeatmapKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.Enter):
 		// Select the heatmap item and navigate to detail view
 		if item := m.heatmap.SelectedItem(); item != nil {
-			// Extract symbol from label (handle "Sector" suffix)
-			label := item.Label
-			sym := label
-			if strings.HasSuffix(label, " Sector") {
-				// For sector heatmaps, just go back to watchlist
-				m.mode = viewWatchlist
-				break
-			}
+			sym := item.Label
 			// Find the symbol in the watchlist and switch to detail.
 			found := false
 			for i, wi := range m.items {
@@ -3149,12 +3167,6 @@ func (m Model) setHeatmapType(kind HeatmapType) (tea.Model, tea.Cmd) {
 		}
 		m.heatmap.RebuildVisibleIdxs(m.width-2, m.height-3)
 		return m, nil
-	// case HeatmapVolume:
-	// 	m.heatmap.BuildVolumeHeatmap(m.items)
-	// 	return m, nil
-	// case HeatmapSector:
-	// 	m.heatmap.BuildSectorHeatmap(m.items)
-	// 	return m, nil
 	case HeatmapMostActive, HeatmapTrendNow:
 		return m, m.fetchHeatmapFeed(kind)
 	default:
@@ -3210,20 +3222,8 @@ func (m Model) handleHeatmapWatchlistQuotes(msg heatmapWatchlistQuotesMsg) (tea.
 	for _, q := range msg.quotes {
 		qmap[q.Symbol] = q
 	}
-	for i := range m.heatmap.Items {
-		sym := m.heatmap.Items[i].Label
-		if q, ok := qmap[sym]; ok {
-			if q.Price != 0 && q.PreviousClose != 0 {
-				m.heatmap.Items[i].Change = ((q.Price - q.PreviousClose) / q.PreviousClose) * 100
-			} else {
-				m.heatmap.Items[i].Change = q.Change
-			}
-			qCopy := q
-			m.heatmap.Items[i].Quote = &qCopy
-		}
-	}
-	m.heatmap.applySorting()
-	m.heatmap.findSelectedIndex()
+	all := m.allWatchlistItemsWithQuotes(qmap)
+	m.heatmap.BuildWatchlistHeatmap(all)
 	m.heatmap.RebuildVisibleIdxs(m.width-2, m.height-3)
 	return m, nil
 }
@@ -3234,6 +3234,10 @@ func (m Model) handleHeatmapWatchlistQuotes(msg heatmapWatchlistQuotesMsg) (tea.
 // the cache will appear without quote data until the background fetch completes.
 // Each symbol is included at most once (active group data wins on duplicates).
 func (m Model) allWatchlistItems() []WatchlistItem {
+	return m.allWatchlistItemsWithQuotes(nil)
+}
+
+func (m Model) allWatchlistItemsWithQuotes(extraQuotes map[string]yahoo.Quote) []WatchlistItem {
 	seen := make(map[string]bool)
 	all := make([]WatchlistItem, 0)
 
@@ -3254,7 +3258,13 @@ func (m Model) allWatchlistItems() []WatchlistItem {
 			}
 			seen[w.Symbol] = true
 			it := WatchlistItem{Symbol: w.Symbol, Name: w.Name}
-			if m.cache != nil {
+			if extraQuotes != nil {
+				if q, ok := extraQuotes[w.Symbol]; ok {
+					qCopy := q
+					it.Quote = &qCopy
+				}
+			}
+			if it.Quote == nil && m.cache != nil {
 				if stale := m.cache.GetQuotesStale([]string{w.Symbol}); len(stale) > 0 {
 					q := stale[0]
 					it.Quote = &q

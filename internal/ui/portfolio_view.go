@@ -332,9 +332,6 @@ func (m *Model) applyQuotesToPortfolio(quotes []yahoo.Quote) {
 			for j, p := range m.portfolio.Positions {
 				if p.Symbol == item.Symbol && p.OpenPrice == 0 {
 					m.portfolio.Positions[j].OpenPrice = q.Open
-					if m.portfolio.Positions[j].AddedAt == "" {
-						m.portfolio.Positions[j].AddedAt = time.Now().Format(time.RFC3339)
-					}
 					persistDirty = true
 					logger.Log("portfolio: auto-filled open price for %s = %.4f", item.Symbol, q.Open)
 					break
@@ -415,6 +412,8 @@ func (m Model) beginPortfolioAdd(symbol, name string) (tea.Model, tea.Cmd) {
 	m.portfolioForm = portfolioFormState{
 		active: true, editing: false,
 		symbol: symbol, name: name,
+		posField:  "10",
+		dateField: time.Now().Format(time.DateOnly),
 	}
 	m.mode = viewPortfolio
 	return m, nil
@@ -430,6 +429,12 @@ func (m Model) beginPortfolioEdit() (tea.Model, tea.Cmd) {
 		symbol:   it.Symbol,
 		name:     it.Name,
 		posField: strconv.FormatFloat(it.Position, 'f', -1, 64),
+		dateField: func() string {
+			if p := m.portfolio.Find(it.Symbol); p != nil && strings.TrimSpace(p.BoughtAt) != "" {
+				return p.BoughtAt
+			}
+			return time.Now().Format(time.DateOnly)
+		}(),
 	}
 	if it.OpenPrice > 0 {
 		m.portfolioForm.openField = strconv.FormatFloat(it.OpenPrice, 'f', -1, 64)
@@ -444,10 +449,10 @@ func (m Model) handlePortfolioFormKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.portfolioForm = portfolioFormState{}
 		return m, nil
 	case "tab", "down":
-		m.portfolioForm.focus = (m.portfolioForm.focus + 1) % 2
+		m.portfolioForm.focus = (m.portfolioForm.focus + 1) % 3
 		return m, nil
 	case "shift+tab", "up":
-		m.portfolioForm.focus = (m.portfolioForm.focus + 1) % 2
+		m.portfolioForm.focus = (m.portfolioForm.focus + 3 - 1) % 3
 		return m, nil
 	case "enter":
 		return m.submitPortfolioForm()
@@ -456,17 +461,25 @@ func (m Model) handlePortfolioFormKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.portfolioForm.posField = m.portfolioForm.posField[:len(m.portfolioForm.posField)-1]
 		} else if m.portfolioForm.focus == 1 && len(m.portfolioForm.openField) > 0 {
 			m.portfolioForm.openField = m.portfolioForm.openField[:len(m.portfolioForm.openField)-1]
+		} else if m.portfolioForm.focus == 2 && len(m.portfolioForm.dateField) > 0 {
+			m.portfolioForm.dateField = m.portfolioForm.dateField[:len(m.portfolioForm.dateField)-1]
 		}
 		return m, nil
 	}
-	// accept digits, dot, minus (not used here but harmless)
 	if len(s) == 1 {
 		c := s[0]
-		if (c >= '0' && c <= '9') || c == '.' {
-			if m.portfolioForm.focus == 0 {
-				m.portfolioForm.posField += s
-			} else {
-				m.portfolioForm.openField += s
+		switch m.portfolioForm.focus {
+		case 0, 1:
+			if (c >= '0' && c <= '9') || c == '.' {
+				if m.portfolioForm.focus == 0 {
+					m.portfolioForm.posField += s
+				} else {
+					m.portfolioForm.openField += s
+				}
+			}
+		case 2:
+			if (c >= '0' && c <= '9') || c == '-' {
+				m.portfolioForm.dateField += s
 			}
 		}
 	}
@@ -476,7 +489,7 @@ func (m Model) handlePortfolioFormKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m Model) submitPortfolioForm() (tea.Model, tea.Cmd) {
 	pos, err := strconv.ParseFloat(strings.TrimSpace(m.portfolioForm.posField), 64)
 	if err != nil || pos <= 0 {
-		m.portfolioForm.err = "position must be > 0"
+		m.portfolioForm.err = "quantity must be > 0"
 		return m, nil
 	}
 	var openPrice float64
@@ -487,13 +500,22 @@ func (m Model) submitPortfolioForm() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	}
+	boughtAt := strings.TrimSpace(m.portfolioForm.dateField)
+	if boughtAt == "" {
+		boughtAt = time.Now().Format(time.DateOnly)
+	}
+	parsedDate, err := time.Parse(time.DateOnly, boughtAt)
+	if err != nil {
+		m.portfolioForm.err = "bought date must be YYYY-MM-DD"
+		return m, nil
+	}
 
 	m.promotePortfolioToFile()
 	p := portfolio.Position{
 		Symbol:    m.portfolioForm.symbol,
 		Position:  pos,
 		OpenPrice: openPrice,
-		AddedAt:   time.Now().Format(time.RFC3339),
+		BoughtAt:  parsedDate.Format(time.DateOnly),
 	}
 	if existing := m.portfolio.Find(p.Symbol); existing != nil {
 		p.Note = existing.Note
@@ -530,7 +552,7 @@ func (m Model) renderPortfolioForm() string {
 	title := helpKeyStyle.Render(fmt.Sprintf("  ◆ %s position — %s (%s)", verb, m.portfolioForm.symbol, truncate(m.portfolioForm.name, 40)))
 
 	cursor := "█"
-	posLine := "  Position: " + m.portfolioForm.posField
+	posLine := "  Quantity: " + m.portfolioForm.posField
 	if m.portfolioForm.focus == 0 {
 		posLine += cursor
 	}
@@ -538,13 +560,17 @@ func (m Model) renderPortfolioForm() string {
 	if m.portfolioForm.focus == 1 {
 		openLine += cursor
 	}
+	dateLine := "  Bought date (YYYY-MM-DD): " + m.portfolioForm.dateField
+	if m.portfolioForm.focus == 2 {
+		dateLine += cursor
+	}
 
 	errLine := ""
 	if m.portfolioForm.err != "" {
 		errLine = "\n" + errorStyle.Render("  "+m.portfolioForm.err)
 	}
 	footer := helpStyle.Render("  Tab switch  Enter save  Esc cancel")
-	return title + "\n\n" + nameStyle.Render(posLine) + "\n" + nameStyle.Render(openLine) + errLine + "\n\n" + footer
+	return title + "\n\n" + nameStyle.Render(posLine) + "\n" + nameStyle.Render(openLine) + "\n" + nameStyle.Render(dateLine) + errLine + "\n\n" + footer
 }
 
 // === AI advisor ===

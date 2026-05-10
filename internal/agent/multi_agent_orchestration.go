@@ -6,6 +6,8 @@ package agent
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -28,20 +30,20 @@ const (
 
 // RoleAnalysis holds the result of one analyst's evaluation.
 type RoleAnalysis struct {
-	Role       RoleType              `json:"role"`
-	Analysis   string                `json:"analysis"`
-	Score      float64               `json:"score"`
-	Confidence float64               `json:"confidence"`
-	Verdict    string                `json:"verdict,omitempty"`     // for synthesis roles
-	RawOutput  string                `json:"raw_output,omitempty"`  // full LLM response for audit
-	Error      error                 `json:"-"`                     // errors don't serialize to JSON
+	Role       RoleType `json:"role"`
+	Analysis   string   `json:"analysis"`
+	Score      float64  `json:"score"`
+	Confidence float64  `json:"confidence"`
+	Verdict    string   `json:"verdict,omitempty"`    // for synthesis roles
+	RawOutput  string   `json:"raw_output,omitempty"` // full LLM response for audit
+	Error      error    `json:"-"`                    // errors don't serialize to JSON
 }
 
 // MultiAgentConfig tunes the orchestration layer.
 type MultiAgentConfig struct {
-	MaxStepsPerRole int           // 0 → 6; max LLM iterations per role
-	PerToolCallCap  int           // 0 → 4; max times same tool can be called
-	ParallelRoles   bool          // if true, run all roles concurrently; if false, sequential (for testing/debugging)
+	MaxStepsPerRole int                  // 0 → 6; max LLM iterations per role
+	PerToolCallCap  int                  // 0 → 4; max times same tool can be called
+	ParallelRoles   bool                 // if true, run all roles concurrently; if false, sequential (for testing/debugging)
 	OnRoleStep      func(RoleType, Step) // callback when a role completes a tool call
 	OnRoleComplete  func(RoleAnalysis)   // callback when a role completes analysis
 }
@@ -50,6 +52,7 @@ type MultiAgentConfig struct {
 type RoleAgent struct {
 	Role       RoleType
 	Prompt     string
+	Question   string
 	Tools      []Tool
 	Client     *llm.Client
 	ResultChan chan RoleAnalysis
@@ -77,7 +80,7 @@ func NewMultiAgentOrchestrator(cfg MultiAgentConfig) *MultiAgentOrchestrator {
 }
 
 // RegisterRole adds a role agent to the orchestrator.
-func (m *MultiAgentOrchestrator) RegisterRole(role RoleType, client *llm.Client, tools []Tool, prompt string) {
+func (m *MultiAgentOrchestrator) RegisterRole(role RoleType, client *llm.Client, tools []Tool, prompt, question string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.Agents[role] = &RoleAgent{
@@ -85,6 +88,7 @@ func (m *MultiAgentOrchestrator) RegisterRole(role RoleType, client *llm.Client,
 		Client:     client,
 		Tools:      tools,
 		Prompt:     prompt,
+		Question:   question,
 		ResultChan: make(chan RoleAnalysis, 1),
 	}
 }
@@ -114,10 +118,7 @@ func (m *MultiAgentOrchestrator) RunRoleAgent(ctx context.Context, role *RoleAge
 	}
 
 	// Execute the agent loop.
-	systemPrompt := role.Prompt
-	messages := []llm.Message{
-		{Role: "system", Content: systemPrompt},
-	}
+	messages := buildRoleMessages(role.Prompt, role.Question)
 	callCount := make(map[string]int)
 
 	var finalAnalysis string
@@ -216,9 +217,8 @@ func (m *MultiAgentOrchestrator) RunAllRoles(ctx context.Context) ([]RoleAnalysi
 
 // SynthesisAgent represents the Portfolio Manager who merges all role outputs.
 type SynthesisAgent struct {
-	Client    *llm.Client
-	Tools     []Tool
-	RoleInputs []RoleAnalysis
+	Client *llm.Client
+	Tools  []Tool
 }
 
 // RunSynthesis executes the Portfolio Manager synthesis step.
@@ -296,29 +296,29 @@ func OrchestrateMultiAgentAnalysis(
 	// Define role-specific prompts (simplified; in production, much more detailed).
 	rolePrompts := map[RoleType]string{
 		RoleMarket: `You are a Market Analyst. Analyze the broader market context, sector trends, 
-and macroeconomic factors relevant to this stock. Provide a market_score [-2..2] and confidence.`,
+and macroeconomic factors relevant to this stock. End your response with "Score: <value>" and "Confidence: <value>" on separate lines.`,
 
 		RoleFundamental: `You are a Fundamental Analyst. Evaluate growth, profitability, balance sheet, 
-valuation, and earnings quality. Provide a fundamental_score [-2..2] and confidence.`,
+valuation, and earnings quality. End your response with "Score: <value>" and "Confidence: <value>" on separate lines.`,
 
 		RoleTechnical: `You are a Technical Analyst. Analyze price trends, momentum, support/resistance, 
-and volatility. Provide a technical_score [-2..2] and confidence.`,
+and volatility. End your response with "Score: <value>" and "Confidence: <value>" on separate lines.`,
 
 		RoleRisk: `You are a Risk Analyst. Identify key risks: concentration, liquidity, event risk, 
-downside triggers. Provide a risk_score [-2..2] (negative = higher risk) and confidence.`,
+downside triggers. End your response with "Score: <value>" and "Confidence: <value>" on separate lines. Negative scores indicate higher risk.`,
 
 		RoleSentiment: `You are a Sentiment & News Analyst. Evaluate recent headlines, sentiment tone, 
-and novelty. Provide a sentiment_news_score [-2..2] and confidence.`,
+and novelty. End your response with "Score: <value>" and "Confidence: <value>" on separate lines.`,
 
 		RoleStrategy: `You are a Strategy Analyst. Evaluate alignment with investment strategies 
-(value, growth, dividend, momentum, etc.), position sizing, and portfolio fit. Provide a strategy_score [-2..2] and confidence.`,
+(value, growth, dividend, momentum, etc.), position sizing, and portfolio fit. End your response with "Score: <value>" and "Confidence: <value>" on separate lines.`,
 	}
 
 	// Register each role.
 	for role, prompt := range rolePrompts {
 		// In production, you'd pass role-specific subsets of tools.
 		// For now, all roles get all tools.
-		orchestrator.RegisterRole(role, client, tools, prompt)
+		orchestrator.RegisterRole(role, client, tools, prompt, question)
 	}
 
 	// Run all role agents in parallel.
@@ -342,10 +342,47 @@ and novelty. Provide a sentiment_news_score [-2..2] and confidence.`,
 
 // Helper functions for score extraction and weighting.
 
+var (
+	scorePattern      = regexp.MustCompile(`(?im)(?:^|\b)(?:score|market_score|fundamental_score|technical_score|risk_score|sentiment_news_score|strategy_score)\s*[:=]\s*(-?\d+(?:\.\d+)?)`)
+	confidencePattern = regexp.MustCompile(`(?im)(?:^|\b)confidence\s*[:=]\s*(\d+(?:\.\d+)?%?)`)
+)
+
 func extractScoreAndConfidence(text string) (float64, float64) {
-	// Simplified extraction; in production, use regex to find "Score: X/2, Confidence: Y" pattern.
-	// For now, return defaults.
-	return 0.0, 0.8
+	score := 0.0
+	if m := scorePattern.FindStringSubmatch(text); len(m) == 2 {
+		if parsed, err := strconv.ParseFloat(m[1], 64); err == nil {
+			switch {
+			case parsed < -2:
+				score = -2
+			case parsed > 2:
+				score = 2
+			default:
+				score = parsed
+			}
+		}
+	}
+
+	confidence := 0.0
+	if m := confidencePattern.FindStringSubmatch(text); len(m) == 2 {
+		raw := strings.TrimSpace(m[1])
+		pct := strings.HasSuffix(raw, "%")
+		raw = strings.TrimSuffix(raw, "%")
+		if parsed, err := strconv.ParseFloat(raw, 64); err == nil {
+			if pct {
+				parsed /= 100
+			}
+			switch {
+			case parsed < 0:
+				confidence = 0
+			case parsed > 1:
+				confidence = 1
+			default:
+				confidence = parsed
+			}
+		}
+	}
+
+	return score, confidence
 }
 
 func extractVerdict(text string) string {
@@ -357,16 +394,6 @@ func extractVerdict(text string) string {
 		return "Bearish"
 	}
 	return "Neutral"
-}
-
-func containsAny(s string, substrs ...string) bool {
-	lowerS := strings.ToLower(s)
-	for _, sub := range substrs {
-		if strings.Contains(lowerS, strings.ToLower(sub)) {
-			return true
-		}
-	}
-	return false
 }
 
 func calculateWeightedScore(roles []RoleAnalysis) float64 {
@@ -400,4 +427,14 @@ func titleCase(s string) string {
 		return s
 	}
 	return string(s[0]-32) + s[1:] // Simple uppercase first letter
+}
+
+func buildRoleMessages(systemPrompt, question string) []llm.Message {
+	messages := []llm.Message{
+		{Role: "system", Content: systemPrompt},
+	}
+	if strings.TrimSpace(question) != "" {
+		messages = append(messages, llm.Message{Role: "user", Content: question})
+	}
+	return messages
 }

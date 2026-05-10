@@ -888,7 +888,7 @@ func renderInlineChart(item WatchlistItem, w, h int, style string, positive bool
 }
 
 // RenderDetailChart renders a large chart for the detail view.
-func RenderDetailChart(item WatchlistItem, width, height int, timeframe string, chartStyle string, showMAOverlay bool, maMode MAMode) string {
+func RenderDetailChart(item WatchlistItem, width, height int, timeframe string, chartStyle string, showOverlay bool, maMode MAMode, overlayMode TechnicalOverlayMode) string {
 	if item.ChartData == nil || len(item.ChartData.Opens) == 0 {
 		return chartBorderStyle.Width(width - 4).Render("No chart data available")
 	}
@@ -960,7 +960,7 @@ func RenderDetailChart(item WatchlistItem, width, height int, timeframe string, 
 		chartWidth = 10
 	}
 
-	chartStr := renderDetailChartContent(item, renderData, chartWidth, chartHeight, chartStyle, positive, showMAOverlay, maMode, timeframe)
+	chartStr := renderDetailChartContent(item, renderData, chartWidth, chartHeight, chartStyle, positive, showOverlay, maMode, overlayMode, timeframe)
 
 	// Render volume bars
 	volStr := ""
@@ -1025,7 +1025,7 @@ func RenderDetailChart(item WatchlistItem, width, height int, timeframe string, 
 		volLabel,
 		volStr,
 	}
-	if showMAOverlay {
+	if showOverlay {
 		if macd := buildMACDSection(item, chartWidth, chartStyle, maMode); macd != "" {
 			parts = append(parts, macd)
 		}
@@ -1260,7 +1260,7 @@ func renderMarketStatus(q *yahoo.Quote) string {
 	return "  " + strings.Join(parts, sep)
 }
 
-func renderDetailChartContent(item WatchlistItem, data *yahoo.ChartData, w, h int, style string, positive bool, showMAOverlay bool, maMode MAMode, timeframe string) string {
+func renderDetailChartContent(item WatchlistItem, data *yahoo.ChartData, w, h int, style string, positive bool, showOverlay bool, maMode MAMode, overlayMode TechnicalOverlayMode, timeframe string) string {
 	if data == nil {
 		return ""
 	}
@@ -1280,8 +1280,8 @@ func renderDetailChartContent(item WatchlistItem, data *yahoo.ChartData, w, h in
 			return ""
 		}
 		closes := data.Closes
-		if showMAOverlay {
-			overlays := buildMAOverlays(item, maMode)
+		if showOverlay {
+			overlays := buildDetailOverlays(item, maMode, overlayMode)
 			for i := range overlays {
 				overlays[i].Values = shapeOverlay(overlays[i].Values)
 			}
@@ -1295,8 +1295,8 @@ func renderDetailChartContent(item WatchlistItem, data *yahoo.ChartData, w, h in
 			return ""
 		}
 		candles := buildCandles(data)
-		if showMAOverlay {
-			overlays := buildMAOverlays(item, maMode)
+		if showOverlay {
+			overlays := buildDetailOverlays(item, maMode, overlayMode)
 			for i := range overlays {
 				overlays[i].Values = shapeOverlay(overlays[i].Values)
 			}
@@ -1310,8 +1310,8 @@ func renderDetailChartContent(item WatchlistItem, data *yahoo.ChartData, w, h in
 			return ""
 		}
 		candles := buildCandles(data)
-		if showMAOverlay {
-			overlays := buildMAOverlays(item, maMode)
+		if showOverlay {
+			overlays := buildDetailOverlays(item, maMode, overlayMode)
 			for i := range overlays {
 				overlays[i].Values = shapeOverlay(overlays[i].Values)
 			}
@@ -1321,6 +1321,13 @@ func renderDetailChartContent(item WatchlistItem, data *yahoo.ChartData, w, h in
 		}
 		return chart.RenderCandlestick(candles, w, h)
 	}
+}
+
+func buildDetailOverlays(item WatchlistItem, maMode MAMode, mode TechnicalOverlayMode) []chart.LineOverlay {
+	if mode == TechnicalOverlayBollinger {
+		return buildBollingerOverlays(item)
+	}
+	return buildMAOverlays(item, maMode)
 }
 
 // buildMAOverlays computes the EMA overlays for the given MA preset
@@ -1367,6 +1374,49 @@ func buildMAOverlays(item WatchlistItem, maMode MAMode) []chart.LineOverlay {
 		})
 	}
 	return out
+}
+
+// buildBollingerOverlays computes BB20 overlays (upper/mid/lower) from
+// the item's primary closes, using optional indicator context for warmup,
+// and returns series aligned 1:1 with the primary bars.
+func buildBollingerOverlays(item WatchlistItem) []chart.LineOverlay {
+	if item.ChartData == nil || len(item.ChartData.Closes) < 20 {
+		return nil
+	}
+	primary := item.ChartData
+	closes := primary.Closes
+	offset := 0
+	if item.IndicatorContext != nil && len(item.IndicatorContext.Closes) > 0 {
+		prefix, _, _ := sliceCtxPrefix(item.IndicatorContext, primary)
+		if len(prefix) > 0 {
+			closes = append(append([]float64{}, prefix...), primary.Closes...)
+			offset = len(prefix)
+		}
+	}
+	bbU, bbM, bbL := chart.BollingerBands(closes, 20, 2)
+	upper := trimPrefix(bbU, offset)
+	mid := trimPrefix(bbM, offset)
+	lower := trimPrefix(bbL, offset)
+	if len(upper) != len(primary.Closes) || len(mid) != len(primary.Closes) || len(lower) != len(primary.Closes) {
+		return nil
+	}
+	return []chart.LineOverlay{
+		{
+			Values: upper,
+			Color:  "\033[38;2;253;224;71m", // yellow
+			Label:  "BB20 Upper",
+		},
+		{
+			Values: mid,
+			Color:  "\033[38;2;125;211;252m", // cyan
+			Label:  "BB20 Mid",
+		},
+		{
+			Values: lower,
+			Color:  "\033[38;2;248;113;113m", // red
+			Label:  "BB20 Lower",
+		},
+	}
 }
 
 // macdWithContext computes MACD(fast,slow,signal) against the item's

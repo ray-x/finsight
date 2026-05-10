@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ray-x/finsight/internal/config"
 	"github.com/ray-x/finsight/internal/portfolio"
@@ -112,6 +114,101 @@ func TestPortfolioBackToWatchlist(t *testing.T) {
 	}
 }
 
+func TestBeginPortfolioAddDefaultsQuantityAndBoughtDate(t *testing.T) {
+	m := newTestPortfolioModel()
+	nm, _ := m.beginPortfolioAdd("TSLA", "Tesla")
+	m = asModel(nm)
+
+	if !m.portfolioForm.active {
+		t.Fatal("expected portfolio form to be active")
+	}
+	if m.portfolioForm.posField != "10" {
+		t.Fatalf("expected default quantity 10, got %q", m.portfolioForm.posField)
+	}
+	if m.portfolioForm.dateField != time.Now().Format(time.DateOnly) {
+		t.Fatalf("expected today's bought date, got %q", m.portfolioForm.dateField)
+	}
+}
+
+func TestPortfolioFormShiftTabMovesBackward(t *testing.T) {
+	m := newTestPortfolioModel()
+	m.portfolioForm = portfolioFormState{
+		active:   true,
+		symbol:   "AAPL",
+		posField: "10",
+		focus:    0,
+	}
+
+	nm, _ := m.handlePortfolioFormKey(keyMsg("shift+tab"))
+	m = asModel(nm)
+	if m.portfolioForm.focus != 2 {
+		t.Fatalf("expected focus to wrap backward to 2, got %d", m.portfolioForm.focus)
+	}
+
+	nm, _ = m.handlePortfolioFormKey(keyMsg("shift+tab"))
+	m = asModel(nm)
+	if m.portfolioForm.focus != 1 {
+		t.Fatalf("expected focus to wrap backward to 1, got %d", m.portfolioForm.focus)
+	}
+
+	nm, _ = m.handlePortfolioFormKey(keyMsg("shift+tab"))
+	m = asModel(nm)
+	if m.portfolioForm.focus != 0 {
+		t.Fatalf("expected focus to wrap backward to 0, got %d", m.portfolioForm.focus)
+	}
+}
+
+func TestSubmitPortfolioFormSavesBoughtDateAndDefaults(t *testing.T) {
+	m := newTestPortfolioModel()
+	m.portfolioPath = filepath.Join(t.TempDir(), "portfolio.yaml")
+	m.portfolioForm = portfolioFormState{
+		active:    true,
+		symbol:    "TSLA",
+		name:      "Tesla",
+		posField:  "10",
+		dateField: "2026-04-30",
+	}
+
+	nm, _ := m.submitPortfolioForm()
+	m = asModel(nm)
+
+	p := m.portfolio.Find("TSLA")
+	if p == nil {
+		t.Fatal("expected TSLA position to be added")
+	}
+	if p.Position != 10 {
+		t.Fatalf("expected quantity 10, got %.2f", p.Position)
+	}
+	if p.BoughtAt != "2026-04-30" {
+		t.Fatalf("expected bought date to persist, got %q", p.BoughtAt)
+	}
+	if p.OpenPrice != 0 {
+		t.Fatalf("expected blank open price to stay 0, got %.2f", p.OpenPrice)
+	}
+}
+
+func TestSubmitPortfolioFormRejectsInvalidBoughtDate(t *testing.T) {
+	m := newTestPortfolioModel()
+	m.portfolioPath = filepath.Join(t.TempDir(), "portfolio.yaml")
+	m.portfolioForm = portfolioFormState{
+		active:    true,
+		symbol:    "TSLA",
+		name:      "Tesla",
+		posField:  "10",
+		dateField: "04/30/2026",
+	}
+
+	nm, _ := m.submitPortfolioForm()
+	m = asModel(nm)
+
+	if m.portfolioForm.err == "" {
+		t.Fatal("expected validation error for invalid bought date")
+	}
+	if got := m.portfolio.Find("TSLA"); got != nil {
+		t.Fatalf("expected TSLA not to be added on invalid date, got %+v", got)
+	}
+}
+
 func TestPortfolioMetricsAndRender(t *testing.T) {
 	m := newTestPortfolioModel()
 	// Inject quotes to exercise compute + render
@@ -176,7 +273,7 @@ func TestPortfolioAutoFillOpenPrice(t *testing.T) {
 	if p == nil || p.OpenPrice != 885 {
 		t.Fatalf("underlying position not updated")
 	}
-	if p.AddedAt == "" {
-		t.Fatalf("AddedAt should be set after auto-fill")
+	if p.BoughtAt != "" {
+		t.Fatalf("expected auto-fill to leave bought date unchanged, got %q", p.BoughtAt)
 	}
 }

@@ -7,6 +7,8 @@ package portfolio
 import (
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -16,13 +18,15 @@ import (
 // Position is the quantity of shares/contracts (float to support fractional
 // shares). OpenPrice is the user's entry cost basis; when zero at load time
 // the UI will auto-fill it from the first fetched quote's Open and persist
-// the update.
+// the update. BoughtAt is the acquisition date in YYYY-MM-DD form and is
+// used for portfolio record-keeping (for example, tax workflows).
 type Position struct {
 	Symbol    string  `yaml:"symbol"`
 	Position  float64 `yaml:"position"`
 	OpenPrice float64 `yaml:"open_price,omitempty"`
 	Note      string  `yaml:"note,omitempty"`
-	AddedAt   string  `yaml:"added_at,omitempty"` // RFC3339; stamped when auto-filled
+	BoughtAt  string  `yaml:"bought_at,omitempty"`
+	AddedAt   string  `yaml:"added_at,omitempty"` // Deprecated legacy field; migrated to BoughtAt on load.
 }
 
 // File is the on-disk schema for portfolio.yaml.
@@ -57,6 +61,7 @@ func Load(path string) (*File, error) {
 	if err := yaml.Unmarshal(data, f); err != nil {
 		return nil, err
 	}
+	f.normalize()
 	return f, nil
 }
 
@@ -75,6 +80,7 @@ func Save(path string, f *File) error {
 	if path == "" {
 		return nil
 	}
+	f.normalize()
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
@@ -88,6 +94,7 @@ func Save(path string, f *File) error {
 
 // Add appends a new position or replaces an existing one by Symbol.
 func (f *File) Add(p Position) {
+	normalizePosition(&p)
 	for i, existing := range f.Positions {
 		if existing.Symbol == p.Symbol {
 			f.Positions[i] = p
@@ -121,6 +128,7 @@ func (f *File) Find(symbol string) *Position {
 
 // Update replaces the position matching p.Symbol. Returns true on success.
 func (f *File) Update(p Position) bool {
+	normalizePosition(&p)
 	for i, existing := range f.Positions {
 		if existing.Symbol == p.Symbol {
 			f.Positions[i] = p
@@ -128,4 +136,36 @@ func (f *File) Update(p Position) bool {
 		}
 	}
 	return false
+}
+
+func (f *File) normalize() {
+	for i := range f.Positions {
+		normalizePosition(&f.Positions[i])
+	}
+}
+
+func normalizePosition(p *Position) {
+	p.BoughtAt = normalizeBoughtAt(p.BoughtAt, p.AddedAt)
+	p.AddedAt = ""
+}
+
+func normalizeBoughtAt(boughtAt, legacyAddedAt string) string {
+	if v := normalizeDateOnly(boughtAt); v != "" {
+		return v
+	}
+	return normalizeDateOnly(legacyAddedAt)
+}
+
+func normalizeDateOnly(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	if t, err := time.Parse(time.DateOnly, s); err == nil {
+		return t.Format(time.DateOnly)
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t.Format(time.DateOnly)
+	}
+	return s
 }

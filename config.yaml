@@ -77,6 +77,26 @@ watchlists:
           name: GOOGL
         - symbol: NVDA
           name: NVDA
+        - symbol: MSFT
+          name: Microsoft Corporation
+        - symbol: META
+          name: Meta Platforms, Inc.
+        - symbol: TSLA
+          name: Tesla, Inc.
+        - symbol: AAPL
+          name: Apple Inc.
+        - symbol: AVGO
+          name: Broadcom Inc.
+        - symbol: AMZN
+          name: Amazon.com, Inc.
+        - symbol: NFLX
+          name: Netflix, Inc.
+        - symbol: WMT
+          name: Walmart Inc.
+        - symbol: INTC
+          name: Intel Corporation
+        - symbol: ORCL
+          name: Oracle Corporation
     - name: Asia
       symbols:
         - symbol: 005930.KS
@@ -103,33 +123,3 @@ watchlists:
           name: EUR/USD
         - symbol: JPY=X
           name: USD/JPY
-
-# ── ACP (Agent Client Protocol) ──────────────────────────────────────────────
-# Launch AI coding agents as subprocesses and communicate via ACP over stdio.
-# Supports gemini-cli, copilot-cli (gh copilot), claude-code, etc.
-# Each entry spawns one agent process; prompts are routed by name.
-#
-# acp:
-#   - name: gemini           # human-readable name used in Prompt(ctx, "gemini", ...)
-#     command: gemini         # executable path
-#     args: ["--acp"]        # CLI flags to enable ACP mode
-#     env: []                # optional extra KEY=VALUE environment variables
-#   - name: copilot
-#     command: gh
-#     args: ["copilot", "--acp"]
-#   - name: claude
-#     command: claude
-#     args: ["--acp"]
-
-# ── Copilot SDK (native Go integration) ──────────────────────────────────────
-# Uses the official github.com/github/copilot-sdk/go to communicate with the
-# GitHub Copilot CLI. Richer than ACP: supports model selection, system message
-# customisation, streaming, tools, and permission control.
-# Requires the `copilot` CLI to be installed (or set cli_path).
-# Auth: uses the logged-in GitHub user by default (gh auth login).
-#
-# copilot_sdk:
-#   cli_path: ""                  # path to copilot CLI (default: auto-detect via PATH / COPILOT_CLI_PATH)
-#   model: "gpt-5"               # model id (gpt-5, claude-sonnet-4.5, etc.)
-#   system_message: "Focus on financial analysis. Always cite data sources."
-#   env: []                       # extra env vars for the CLI subprocess

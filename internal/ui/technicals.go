@@ -14,19 +14,27 @@ import (
 // indicators against a ChartData slice. Values are NaN-padded; callers
 // should consult Latest* helpers for the most recent readings.
 type Technicals struct {
-	SMA20, SMA50, SMA200      []float64
+	SMA20, SMA50, SMA200       []float64
 	EMA9, EMA26, EMA59, EMA120 []float64
-	BBUpper, BBMid, BBLower   []float64
-	RSI14                     []float64
+	BBUpper, BBMid, BBLower    []float64
+	RSI14                      []float64
 	MACD, MACDSignal, MACDHist []float64
-	StochK, StochD            []float64
-	Pivot                     chart.Pivot
+	StochK, StochD             []float64
+	Pivot                      chart.Pivot
 
 	Closes []float64
 
 	// Derived cross state: EMA9 vs EMA26.
 	EMACrossDir     int // +1 bullish, -1 bearish, 0 flat
 	EMACrossBarsAgo int // -1 if no recent cross
+}
+
+type bollingerStrategy struct {
+	label        string
+	detail       string
+	pctB         float64
+	bandwidthPct float64
+	bias         int // +1 bullish, -1 bearish, +2 watch, 0 neutral
 }
 
 // ComputeTechnicals runs all indicator computations on the given
@@ -205,6 +213,8 @@ func RenderTechnicalsPanel(item WatchlistItem, width int, maMode MAMode) string 
 	sb.WriteString("\n")
 	sb.WriteString(renderBollingerLine(t, width))
 	sb.WriteString("\n")
+	sb.WriteString(renderBollingerStrategyLine(t, width))
+	sb.WriteString("\n")
 	sb.WriteString(renderOscillatorLine(t, width))
 	sb.WriteString("\n")
 	sb.WriteString(renderPivotLine(t, item.Quote, width))
@@ -214,15 +224,15 @@ func RenderTechnicalsPanel(item WatchlistItem, width int, maMode MAMode) string 
 // --- per-indicator row renderers ---
 
 var (
-	indLabelStyle    = lipgloss.NewStyle().Foreground(colorBlue).Bold(true)
-	indValueStyle    = lipgloss.NewStyle().Foreground(colorWhite).Bold(true)
-	indDimStyle      = lipgloss.NewStyle().Foreground(colorGray)
-	indBullStyle     = lipgloss.NewStyle().Foreground(colorGreen).Bold(true)
-	indBearStyle     = lipgloss.NewStyle().Foreground(colorRed).Bold(true)
-	indWarnStyle     = lipgloss.NewStyle().Foreground(colorYellow).Bold(true)
-	indActiveLbl     = lipgloss.NewStyle().Foreground(colorYellow).Bold(true)
-	indActiveVal     = lipgloss.NewStyle().Foreground(colorYellow).Bold(true).Underline(true)
-	indHintStyle     = lipgloss.NewStyle().Foreground(colorGray).Italic(true)
+	indLabelStyle = lipgloss.NewStyle().Foreground(colorBlue).Bold(true)
+	indValueStyle = lipgloss.NewStyle().Foreground(colorWhite).Bold(true)
+	indDimStyle   = lipgloss.NewStyle().Foreground(colorGray)
+	indBullStyle  = lipgloss.NewStyle().Foreground(colorGreen).Bold(true)
+	indBearStyle  = lipgloss.NewStyle().Foreground(colorRed).Bold(true)
+	indWarnStyle  = lipgloss.NewStyle().Foreground(colorYellow).Bold(true)
+	indActiveLbl  = lipgloss.NewStyle().Foreground(colorYellow).Bold(true)
+	indActiveVal  = lipgloss.NewStyle().Foreground(colorYellow).Bold(true).Underline(true)
+	indHintStyle  = lipgloss.NewStyle().Foreground(colorGray).Italic(true)
 )
 
 func fmtOrDash(v float64) string {
@@ -328,12 +338,124 @@ func renderBollingerLine(t *Technicals, width int) string {
 	if !math.IsNaN(pctB) {
 		pctStr = fmt.Sprintf("%.2f", pctB)
 	}
-	return indLabelStyle.Render("BB ") +
+	return indLabelStyle.Render("BB20 ") +
 		indDimStyle.Render("upper ") + indValueStyle.Render(fmtOrDash(u)) + "  " +
-		indDimStyle.Render("mid ") + indValueStyle.Render(fmtOrDash(m)) + "  " +
+		indDimStyle.Render("sma20 ") + indValueStyle.Render(fmtOrDash(m)) + "  " +
 		indDimStyle.Render("lower ") + indValueStyle.Render(fmtOrDash(l)) + "  " +
 		indDimStyle.Render("%B ") + indValueStyle.Render(pctStr) + "  " +
 		badge
+}
+
+func renderBollingerStrategyLine(t *Technicals, width int) string {
+	s := deriveBollingerStrategy(t)
+	signalStyle := indDimStyle
+	switch s.bias {
+	case 1:
+		signalStyle = indBullStyle
+	case -1:
+		signalStyle = indBearStyle
+	case 2:
+		signalStyle = indWarnStyle
+	}
+
+	pctStr := "—"
+	if !math.IsNaN(s.pctB) {
+		pctStr = fmt.Sprintf("%.2f", s.pctB)
+	}
+	bandwidthStr := "—"
+	if !math.IsNaN(s.bandwidthPct) {
+		bandwidthStr = fmt.Sprintf("%.1f%%", s.bandwidthPct)
+	}
+
+	return indLabelStyle.Render("BB Strat ") +
+		signalStyle.Render(s.label) + "  " +
+		indDimStyle.Render(s.detail) + "  " +
+		indDimStyle.Render("%B ") + indValueStyle.Render(pctStr) + "  " +
+		indDimStyle.Render("BW ") + indValueStyle.Render(bandwidthStr) + "  " +
+		indHintStyle.Render("20-SMA basis")
+}
+
+func deriveBollingerStrategy(t *Technicals) bollingerStrategy {
+	s := bollingerStrategy{
+		label:        "wait",
+		detail:       "insufficient BB20 data",
+		pctB:         math.NaN(),
+		bandwidthPct: math.NaN(),
+	}
+	if t == nil || len(t.Closes) == 0 || len(t.BBUpper) == 0 || len(t.BBMid) == 0 || len(t.BBLower) == 0 {
+		return s
+	}
+
+	lastIdx := len(t.Closes) - 1
+	close := t.Closes[lastIdx]
+	upper := t.BBUpper[lastIdx]
+	mid := t.BBMid[lastIdx]
+	lower := t.BBLower[lastIdx]
+	if math.IsNaN(upper) || math.IsNaN(mid) || math.IsNaN(lower) {
+		return s
+	}
+
+	if upper != lower {
+		s.pctB = (close - lower) / (upper - lower)
+	}
+	if mid != 0 {
+		s.bandwidthPct = ((upper - lower) / mid) * 100
+	}
+
+	prevValid := false
+	prevClose, prevUpper, prevMid, prevLower := 0.0, math.NaN(), math.NaN(), math.NaN()
+	if lastIdx > 0 {
+		prevClose = t.Closes[lastIdx-1]
+		prevUpper = t.BBUpper[lastIdx-1]
+		prevMid = t.BBMid[lastIdx-1]
+		prevLower = t.BBLower[lastIdx-1]
+		prevValid = !math.IsNaN(prevUpper) && !math.IsNaN(prevMid) && !math.IsNaN(prevLower)
+	}
+
+	switch {
+	case prevValid && prevClose <= prevUpper && close > upper:
+		s.label = "breakout long"
+		s.detail = "fresh close above upper band"
+		s.bias = 1
+	case prevValid && prevClose >= prevLower && close < lower:
+		s.label = "breakdown short"
+		s.detail = "fresh close below lower band"
+		s.bias = -1
+	case close > upper:
+		s.label = "upper-band trend"
+		s.detail = "price riding the upper band"
+		s.bias = 1
+	case close < lower:
+		s.label = "lower-band trend"
+		s.detail = "price riding the lower band"
+		s.bias = -1
+	case !math.IsNaN(s.pctB) && s.pctB >= 0.9:
+		s.label = "reversion short watch"
+		s.detail = "inside-band stretch near upper extreme"
+		s.bias = 2
+	case !math.IsNaN(s.pctB) && s.pctB <= 0.1:
+		s.label = "reversion long watch"
+		s.detail = "inside-band stretch near lower extreme"
+		s.bias = 2
+	case prevValid && prevClose < prevMid && close > mid:
+		s.label = "mid-band reclaim"
+		s.detail = "bullish regain of SMA20"
+		s.bias = 1
+	case prevValid && prevClose > prevMid && close < mid:
+		s.label = "mid-band failure"
+		s.detail = "bearish loss of SMA20"
+		s.bias = -1
+	case !math.IsNaN(s.bandwidthPct) && s.bandwidthPct <= 5:
+		s.label = "squeeze watch"
+		s.detail = "bands tight around SMA20"
+		s.bias = 2
+	default:
+		s.label = "mid-band balance"
+		s.detail = "price rotating around SMA20"
+		s.bias = 0
+	}
+
+	return s
 }
 
 // renderOscillatorLine packs RSI(14) and Stochastic (%K/%D) side-by-side

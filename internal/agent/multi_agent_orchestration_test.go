@@ -30,8 +30,9 @@ func TestRegisterRole(t *testing.T) {
 	client := &llm.Client{}
 	tools := []Tool{}
 	prompt := "test prompt"
+	question := "What changed for NVDA?"
 
-	orch.RegisterRole(RoleMarket, client, tools, prompt)
+	orch.RegisterRole(RoleMarket, client, tools, prompt, question)
 
 	if agent, ok := orch.Agents[RoleMarket]; !ok {
 		t.Fatalf("role %s not registered", RoleMarket)
@@ -39,6 +40,8 @@ func TestRegisterRole(t *testing.T) {
 		t.Fatalf("expected role %s, got %s", RoleMarket, agent.Role)
 	} else if agent.Prompt != prompt {
 		t.Fatalf("prompt mismatch")
+	} else if agent.Question != question {
+		t.Fatalf("question mismatch")
 	}
 }
 
@@ -102,6 +105,62 @@ func TestExtractVerdict(t *testing.T) {
 	}
 }
 
+func TestExtractScoreAndConfidence(t *testing.T) {
+	score, confidence := extractScoreAndConfidence("Analysis...\nScore: 1.25\nConfidence: 80%")
+	if score != 1.25 {
+		t.Fatalf("expected score 1.25, got %.2f", score)
+	}
+	if confidence != 0.8 {
+		t.Fatalf("expected confidence 0.8, got %.2f", confidence)
+	}
+
+	score, confidence = extractScoreAndConfidence("No structured fields here")
+	if score != 0 || confidence != 0 {
+		t.Fatalf("expected zero defaults, got %.2f / %.2f", score, confidence)
+	}
+}
+
+func TestExtractScoreAndConfidenceClampsAndSupportsAliases(t *testing.T) {
+	score, confidence := extractScoreAndConfidence("technical_score: 9\nConfidence: 125")
+	if score != 2 {
+		t.Fatalf("expected clamped score 2, got %.2f", score)
+	}
+	if confidence != 1 {
+		t.Fatalf("expected clamped confidence 1, got %.2f", confidence)
+	}
+
+	score, confidence = extractScoreAndConfidence("risk_score: -9\nConfidence: -5")
+	if score != -2 {
+		t.Fatalf("expected clamped score -2, got %.2f", score)
+	}
+	if confidence != 0 {
+		t.Fatalf("expected clamped confidence 0, got %.2f", confidence)
+	}
+}
+
+func TestBuildRoleMessagesIncludesQuestion(t *testing.T) {
+	msgs := buildRoleMessages("system prompt", "user question")
+	if len(msgs) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(msgs))
+	}
+	if msgs[0].Role != "system" || msgs[1].Role != "user" {
+		t.Fatalf("unexpected roles: %+v", msgs)
+	}
+	if msgs[1].Content != "user question" {
+		t.Fatalf("unexpected user message: %+v", msgs[1])
+	}
+}
+
+func TestBuildRoleMessagesOmitsBlankQuestion(t *testing.T) {
+	msgs := buildRoleMessages("system prompt", "   ")
+	if len(msgs) != 1 {
+		t.Fatalf("expected only system message, got %d", len(msgs))
+	}
+	if msgs[0].Role != "system" {
+		t.Fatalf("unexpected role: %+v", msgs[0])
+	}
+}
+
 // TestCalculateWeightedScore validates score weighting across roles.
 func TestCalculateWeightedScore(t *testing.T) {
 	roles := []RoleAnalysis{
@@ -115,7 +174,7 @@ func TestCalculateWeightedScore(t *testing.T) {
 	// Expected: 0.7 + 0.25 + 0.0 + 0.075 - 0.05 - 0.025 = 0.95
 	expected := 0.95
 	got := calculateWeightedScore(roles)
-	
+
 	// Use approximate equality due to floating-point precision
 	epsilon := 0.001
 	if got < expected-epsilon || got > expected+epsilon {
@@ -126,9 +185,9 @@ func TestCalculateWeightedScore(t *testing.T) {
 // TestWeightedScoreWithMissingRoles validates handling of incomplete role set.
 func TestWeightedScoreWithMissingRoles(t *testing.T) {
 	roles := []RoleAnalysis{
-		{Role: RoleFundamental, Score: 1.0},  // 35% → 0.35
-		{Role: RoleTechnical, Score: 2.0},    // 25% → 0.5
-		{Role: RoleSentiment, Score: -0.5},   // 15% → -0.075
+		{Role: RoleFundamental, Score: 1.0}, // 35% → 0.35
+		{Role: RoleTechnical, Score: 2.0},   // 25% → 0.5
+		{Role: RoleSentiment, Score: -0.5},  // 15% → -0.075
 		// Missing: Strategy, Market, Risk
 	}
 	// Should still compute weighted avg of available roles.

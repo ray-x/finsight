@@ -1,55 +1,77 @@
-# Financial market insight with AI
+# Finsight
 
 [![CI](https://github.com/ray-x/finsight/actions/workflows/ci.yml/badge.svg)](https://github.com/ray-x/finsight/actions/workflows/ci.yml)
 [![Release](https://github.com/ray-x/finsight/actions/workflows/release.yml/badge.svg)](https://github.com/ray-x/finsight/actions/workflows/release.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/ray-x/finsight)](https://goreportcard.com/report/github.com/ray-x/finsight)
 
-**Elevator pitch:** Track, analyze, and act faster: Finsight combines real-time watchlists, multi-timeframe charting, financial and holder data, and AI-powered insights without leaving your terminal.
-It is a terminal-based stock market watchlist and charting tool inspired by [btop+](https://github.com/aristocratos/btop) and Google Finance. Built with Go using [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss).
+Finsight is a terminal-native market workstation for tracking symbols, reviewing charts and fundamentals, monitoring earnings/news, managing a private portfolio, and asking AI-driven questions without leaving the shell.
+
+<img width="1200"  alt="image" src="https://gist.github.com/user-attachments/assets/aec9dbbe-198b-4bb6-9829-117fdbbcd1bb" />
+
+<img width="1200"  alt="image" src="https://gist.github.com/user-attachments/assets/24be820a-d7d5-436d-8ad4-055c6ae7b834" />
+
+Built with Go on top of [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss), it combines a fast TUI with local caching, SQLite persistence, multi-provider LLM support, and an agentic prompt flow that can pull quotes, technicals, earnings, news, and portfolio context on demand.
+
+## Application highlights
+
+- **One terminal workflow** — watchlist, detail view, portfolio, heatmap, earnings, and AI prompt window are all part of the same TUI
+- **Fast visual analysis** — multi-timeframe charts, sparklines, technical overlays, related-symbol comparison, and heatmaps for watchlists and portfolios
+- **Private portfolio tracking** — separate `portfolio.yaml`, quantity + bought-date aware entries, auto-filled cost basis, live P/L, and AI portfolio review
+- **AI that understands context** — use slash macros or ask in plain English; Finsight can inject portfolio/watchlist/earnings/news context automatically
+- **Event-aware earnings pipeline** — company IR monitoring, EDGAR confirmation, and Yahoo backfill work together for faster earnings coverage
+- **Extensible agent stack** — OpenAI-compatible APIs, GitHub Copilot, Vertex, Gemini, Anthropic, MCP servers, ACP agents, and Copilot SDK integration
 
 ## Features
 
-### Watchlist
-- **Real-time quotes** — Price, change, change%, volume, market cap, 52-week range
-- **Inline sparklines** — Color-coded trend charts in every row
-- **Watchlist groups** — Organize symbols into named groups (e.g., "Tech", "Index & ETF", "Asia"); switch with `1`-`9`
-- **Sort modes** — By symbol, change%, or market cap (asc/desc)
-- **Pre/post market data** — Extended hours pricing when markets are closed
-- **Tab bar** — `Watchlist | Portfolio` switch on line 1 (with `w`/`p` shortcuts), group tabs on line 2
+### Watchlist and overview
 
-### Detail View
-- **Candlestick charts** — Braille-dot OHLC candlesticks with wicks, volume bars, X/Y axis labels
+- **Grouped watchlists** — organize symbols into named tabs and switch with `1`-`9`
+- **Live market rows** — price, change, change %, volume, market cap, 52-week range, and inline sparklines
+- **Multiple sort modes** — symbol, change %, and market cap ascending/descending
+- **Extended-hours awareness** — pre/post-market quotes and market-state details when available
+- **Watchlist summary** — ask the configured LLM for an at-a-glance summary of the active group with `S`
+- **Aggregate heatmap** — open a watchlist heatmap across **all symbols in all groups**, not just the current tab
+- **Symbol search** — search Yahoo Finance, preview results, and add them directly from the app
+
+### Detail analysis
+
+- **8 timeframes** — `1D`, `1W`, `1M`, `6M`, `1Y`, `3Y`, `5Y`, `10Y`
 - **Multiple chart styles** — `candlestick_dotted`, `candlestick`, `dotted_line`
-- **8 timeframes** — 1D, 1W, 1M, 6M, 1Y, 3Y, 5Y, 10Y
-- **Related symbols** — Auto-discovered similar stocks with synced sparkline charts
-- **Key stats bar** — PE, Forward PE, PEG, EPS, Beta, 52-week range, dividend yield
+- **Technical overlays and panels** — moving-average presets, MACD, and related indicator context
+- **Related symbols** — auto-discovered peers with compare mode from the detail screen
+- **Deep market popup** — market, financials, and holders tabs from a single `m` popup
+- **Key stats bar** — valuation, EPS, beta, dividend yield, ranges, and other high-signal snapshot data
 
-### Market Data Popup (press `m`)
-- **Market tab** — Bid/ask, volume, fundamentals, market state
-- **Financials tab** — Revenue vs Earnings chart, key metrics, balance sheet, valuation (EV, P/S, EV/EBITDA), EPS trend, analyst price targets, recommendation trend chart
-- **Holders tab** — Institutional ownership breakdown, top holders, insider holdings
+### Portfolio and heatmap
 
-### Portfolio
-- **Private positions** — Track shares, entry price, live market value, daily and unrealized P/L per position; press `p` from the watchlist to open.
-- **Auto cost basis** — Leave the open price blank and Finsight fills it from today's open on the first fetch and persists it.
-- **Profit toggle** — Swap the profit column between `%` and absolute `$` with the `%` key.
-- **AI advisor** — `a` opens the AI Command window pre-seeded with the selected position + `/portfolio` context; `A` starts a holistic portfolio review.
-- **Private by default** — Positions live in `~/.config/finsight/portfolio.yaml` (chmod `0600`) separate from your shared `config.yaml`.
+- **Private portfolio storage** — positions live separately from shared watchlist config
+- **In-app add/edit form** — new positions default to quantity `10` and today's `bought_at` date, both editable before saving
+- **Auto cost basis fill** — leave `open_price` empty and Finsight can seed it from today’s open on first fetch
+- **Live position metrics** — market value, daily P/L, unrealized P/L, and position weighting
+- **Profit display toggle** — switch between `%` and `$` with `%`
+- **Portfolio heatmap** — view all holdings as a treemap and toggle tile sizing between **current market value** and **market cap**
+- **Portfolio AI review** — ask about a selected position with `a` or trigger a whole-portfolio review with `A`
 
-### AI Command Window (press `a` from any view)
-- **Interactive prompt** with macro expansion — type plain English plus slash macros
-- **Macros**: `/symbol:SYM`, `/range:1D…5Y`, `/earning:SYM`, `/news:SYM`, `/portfolio`, `/watchlist`, `/help`
-- **Autocomplete dropdown** — `/` for macros, `/symbol:` / `/earning:` / `/news:` for tickers from your watchlist+portfolio, `/range:` for timeframes
-- **Detail-view auto-fill** — on a symbol page, bare `/symbol`, `/earning`, and `/news` expand to the current ticker automatically
-- **Auto-fetch** — missing earnings or news data is fetched on demand before the LLM is called; results are cached (24h / 1h)
-- **Prompt history** (↑/↓), scrollable markdown output with **table rendering**
-- **Multi-provider LLM** — OpenAI-compatible endpoints, **GitHub Copilot** (personal / business / enterprise, with auto-discovered endpoint), and **Google Vertex AI** (Gemini via Model Garden)
+### AI command window
 
-### Other
-- **Symbol search** — Search and add symbols from Yahoo Finance with preview sparklines
-- **Local cache** — 15-min TTL for quotes/charts, 24-hour TTL for financials/holders
-- **YAML config** — Persistent watchlist and preferences
-- **Cross-platform** — macOS (ARM64), Linux (x86_64), Windows (x86_64)
+<img width="1200" alt="image" src="https://gist.github.com/user-attachments/assets/fcf4892e-9493-4134-98c4-e992b1f15124" />
+
+- **Natural-language and macro-driven prompts** — use plain English, slash commands, or mix both
+- **Context macros** — `/symbol`, `/range`, `/earning`, `/news`, `/portfolio`, `/watchlist`, `/help`
+- **Prompt helpers** — `/ask`, `/summarise`, `/analyze`, and `/compare`
+- **Autocomplete** — slash-triggered suggestions for macros, symbols, and timeframes
+- **Detail-view autofill** — bare `/symbol`, `/earning`, and `/news` expand to the current symbol
+- **Agentic execution path** — plain questions can route through a tool-using agent loop instead of macro expansion
+- **Optional seven-role analysis** — enable `llm.use_multi_agent: true` for Market / Fundamental / Technical / Risk / Sentiment / Strategy roles plus Portfolio Manager synthesis
+- **Markdown output** — scrollable rendered tables, headings, lists, and code blocks inside the TUI
+
+### Data, earnings, and integrations
+
+- **Three-phase earnings ingestion** — company IR detection, EDGAR confirmation, and Yahoo normalization/backfill
+- **Local cache + SQLite persistence** — quotes, chart bars, filings, reports, and text cache stored locally
+- **Multiple AI providers** — OpenAI-compatible APIs, GitHub Copilot, Vertex AI, Google Gemini, and Anthropic
+- **External agent/tool integration** — MCP servers, ACP subprocess agents, native Copilot SDK support, and legacy A2A support
+- **Cross-platform** — macOS, Linux, and Windows
 
 ## Install
 
@@ -57,11 +79,11 @@ It is a terminal-based stock market watchlist and charting tool inspired by [bto
 
 Download from the [Releases](https://github.com/ray-x/finsight/releases) page:
 
-| Platform | File |
-|----------|------|
-| macOS ARM64 | `finsight-*-darwin-arm64.tar.gz` |
-| Linux x86_64 | `finsight-*-linux-amd64.tar.gz` |
-| Windows x86_64 | `finsight-*-windows-amd64.zip` |
+| Platform       | File                             |
+| -------------- | -------------------------------- |
+| macOS ARM64    | `finsight-*-darwin-arm64.tar.gz` |
+| Linux x86_64   | `finsight-*-linux-amd64.tar.gz`  |
+| Windows x86_64 | `finsight-*-windows-amd64.zip`   |
 
 ### Go install
 
@@ -85,85 +107,129 @@ finsight --config path.yaml # use custom config
 finsight --version          # print version
 ```
 
+Finsight uses `./config.yaml` if present; otherwise it falls back to `~/.config/finsight/config.yaml`. Portfolio data is stored separately in `./portfolio.yaml` or `~/.config/finsight/portfolio.yaml`.
+
+### Common workflows
+
+1. **Open the watchlist** and switch groups with `1`-`9`
+2. **Press `Enter`** on a symbol for the detail screen
+3. **Press `m`** for market / financials / holders tabs
+4. **Press `a`** to ask the AI about the current symbol, watchlist, or portfolio
+5. **Press `H`** from the watchlist or `h` / `H` from the portfolio for heatmap view
+6. **Press `p`** to move between watchlist and portfolio
+
+### AI prompt examples
+
+```text
+/analyze /symbol:NVDA in /range:1M and /earning:NVDA
+Review my /portfolio for concentration risk
+/ask What changed for AMD this week?
+/compare /symbol:AAPL vs /symbol:MSFT in /range:1Y
+```
+
 ## Keybindings
 
 ### Watchlist
 
-| Key | Action |
-|-----|--------|
-| `↑` / `k` | Move up |
-| `↓` / `j` | Move down |
-| `←` / `h` | Previous timeframe |
-| `→` / `l` | Next timeframe |
-| `Enter` | Open detail view |
-| `/` | Search symbols |
-| `s` | Cycle sort mode |
-| `d` / `x` | Remove symbol |
-| `1`-`9` | Switch watchlist group |
-| `p` / `P` | Open Portfolio view |
-| `a` | Open AI Command window |
-| `r` | Force refresh |
-| `?` | Help screen |
-| `Esc` / `q` | Quit |
+| Key         | Action                                         |
+| ----------- | ---------------------------------------------- |
+| `↑` / `k`   | Move up                                        |
+| `↓` / `j`   | Move down                                      |
+| `←` / `h`   | Previous timeframe                             |
+| `→` / `l`   | Next timeframe                                 |
+| `Enter`     | Open detail view                               |
+| `/`         | Search symbols                                 |
+| `s`         | Cycle sort mode                                |
+| `d` / `x`   | Remove symbol                                  |
+| `1`-`9`     | Switch watchlist group                         |
+| `p` / `P`   | Open Portfolio view                            |
+| `H`         | Open watchlist heatmap (all groups)            |
+| `S`         | Open AI summary for the active watchlist group |
+| `a`         | Open AI Command window                         |
+| `r` / `R`   | Refresh symbol / refresh all                   |
+| `c`         | Cycle chart style                              |
+| `M`         | Cycle moving-average preset                    |
+| `?`         | Help screen                                    |
+| `Esc` / `q` | Quit                                           |
 
 ### Detail View
 
-| Key | Action |
-|-----|--------|
-| `←` / `→` | Change timeframe |
-| `[` / `]` | Previous / next symbol |
-| `m` | Open market data popup |
-| `a` | Open AI Command window (pre-seeded with current symbol + timeframe) |
-| `e` | Earnings report (requires LLM config) |
-| `Esc` | Back to watchlist |
+| Key       | Action                                                                 |
+| --------- | ---------------------------------------------------------------------- |
+| `←` / `→` | Change timeframe                                                       |
+| `[` / `]` | Previous / next symbol                                                 |
+| `m`       | Open market data popup                                                 |
+| `t`       | Toggle technicals panel                                                |
+| `c`       | Cycle chart style                                                      |
+| `M`       | Cycle moving-average preset                                            |
+| `a`       | Open AI Command window (pre-seeded with current symbol + timeframe)    |
+| `e`       | Earnings report (requires LLM config)                                  |
+| `w` / `W` | Return to watchlist; add transient symbol to watchlist when applicable |
+| `r` / `R` | Refresh symbol / refresh all                                           |
+| `Esc`     | Back to watchlist                                                      |
 
 ### Market Data Popup
 
-| Key | Action |
-|-----|--------|
-| `Tab` / `Shift+Tab` | Cycle tabs |
-| `1` / `2` / `3` | Jump to Market / Financials / Holders |
-| `m` / `Esc` | Close popup |
+| Key                 | Action                                |
+| ------------------- | ------------------------------------- |
+| `Tab` / `Shift+Tab` | Cycle tabs                            |
+| `1` / `2` / `3`     | Jump to Market / Financials / Holders |
+| `m` / `Esc`         | Close popup                           |
 
 ### AI Command Window
 
-| Key | Action |
-|-----|--------|
-| Typing | Edits prompt; `/` triggers macro autocomplete |
-| `Tab` / `→` | Accept selected suggestion |
-| `Enter` | Send prompt to LLM |
-| `↑` / `↓` | Prompt history (input) · scroll output (result) |
-| `PgUp` / `PgDn` | Scroll output 10 lines |
-| `Ctrl+L` | Clear buffer |
-| `Ctrl+R` | Regenerate (bypass cache) |
-| `Ctrl+W` | Delete previous word · `Ctrl+U` delete to start |
-| `Ctrl+A` / `Ctrl+E` | Cursor to start / end |
-| `Esc` | Close window |
+| Key                 | Action                                          |
+| ------------------- | ----------------------------------------------- |
+| Typing              | Edits prompt; `/` triggers macro autocomplete   |
+| `Tab` / `→`         | Accept selected suggestion                      |
+| `Enter`             | Send prompt to LLM                              |
+| `↑` / `↓`           | Prompt history (input) · scroll output (result) |
+| `PgUp` / `PgDn`     | Scroll output 10 lines                          |
+| `Ctrl+L`            | Clear buffer                                    |
+| `Ctrl+R`            | Regenerate (bypass cache)                       |
+| `Ctrl+W`            | Delete previous word · `Ctrl+U` delete to start |
+| `Ctrl+A` / `Ctrl+E` | Cursor to start / end                           |
+| `Esc`               | Close window                                    |
 
 ### Earnings Popup
 
-| Key | Action |
-|-----|--------|
+| Key           | Action                                 |
+| ------------- | -------------------------------------- |
 | `R` (Shift+R) | Force refresh (clear cache + re-fetch) |
-| `↑` / `↓` | Scroll |
-| `Esc` | Close popup |
+| `↑` / `↓`     | Scroll                                 |
+| `Esc`         | Close popup                            |
 
 ### Portfolio
 
-| Key | Action |
-|-----|--------|
-| `p` / `P` | Toggle between Portfolio and Watchlist views |
-| `w` / `W` | Switch to Watchlist view |
-| `↑` / `↓` | Navigate positions |
-| `Enter` | Open detail view for selected symbol |
-| `/` | Add position (search then fill position size) |
-| `e` | Edit selected position (size / open price) |
-| `d` / `x` | Remove selected position |
-| `%` | Toggle profit column between `%` and `$` |
-| `a` | Open AI Command window (pre-seeded with `/symbol:<SYM>` + `/portfolio`) |
-| `A` | AI review of the entire portfolio |
-| `r` | Force refresh |
-| `Esc` | Back to watchlist |
+| Key       | Action                                                                  |
+| --------- | ----------------------------------------------------------------------- |
+| `p` / `P` | Toggle between Portfolio and Watchlist views                            |
+| `w` / `W` | Switch to Watchlist view                                                |
+| `↑` / `↓` | Navigate positions                                                      |
+| `Enter`   | Open detail view for selected symbol                                    |
+| `/`       | Add position (search then fill position size)                           |
+| `e`       | Edit selected position (size / open price)                              |
+| `d` / `x` | Remove selected position                                                |
+| `%`       | Toggle profit column between `%` and `$`                                |
+| `h` / `H` | Open portfolio heatmap                                                  |
+| `a`       | Open AI Command window (pre-seeded with `/symbol:<SYM>` + `/portfolio`) |
+| `A`       | AI review of the entire portfolio                                       |
+| `r`       | Force refresh                                                           |
+| `Esc`     | Back to watchlist                                                       |
+
+### Heatmap
+
+| Key         | Action                                                              |
+| ----------- | ------------------------------------------------------------------- |
+| `↑` / `↓`   | Move selection                                                      |
+| `Enter`     | Open detail view for selected symbol                                |
+| `t` / `T`   | Cycle heatmap type                                                  |
+| `s` / `S`   | Cycle sort mode                                                     |
+| `v` / `V`   | Toggle portfolio heatmap sizing between market value and market cap |
+| `r` / `R`   | Reload current heatmap                                              |
+| `w` / `W`   | Jump to Watchlist                                                   |
+| `p` / `P`   | Jump to Portfolio                                                   |
+| `Esc` / `q` | Leave heatmap                                                       |
 
 ## Configuration
 
@@ -177,12 +243,13 @@ chart_style: candlestick_dotted  # candlestick_dotted | candlestick | dotted_lin
 colorscheme: default        # default | tokyonight | catppuccin | dracula | nord | gruvbox | solarized | ansi
 
 llm:
-  provider: copilot         # openai (default) | copilot | vertex
+  provider: copilot         # openai (default) | copilot | vertex | gemini | anthropic
   model: gpt-4o             # provider-specific model id
   # endpoint is only required for provider: openai; copilot auto-discovers it
   # endpoint: https://api.openai.com/v1
   # api_key_env: MY_TOKEN   # optional: name a custom env var to read the secret from
   context_tokens: 65536
+  use_multi_agent: false    # true = 7-role analysis pipeline for plain-English AI prompts
   # vertex-only:
   # project: my-gcp-project
   # location: global        # or us-central1, etc.
@@ -259,13 +326,15 @@ watchlists:
 
 ### LLM / AI
 
-Finsight supports three backends. Select one with `llm.provider`:
+Finsight supports five LLM backends. Select one with `llm.provider`:
 
-| Provider | Description | Required config | Credential (env) |
-|---|---|---|---|
-| `openai` *(default)* | Any OpenAI-compatible `/chat/completions` API — OpenAI, Ollama, llama.cpp, vLLM, LM Studio, OpenRouter, etc. | `endpoint`, `model` | `OPENAI_API_KEY` (or none for local servers) |
-| `copilot` | GitHub Copilot chat. Works with personal, Business, and Enterprise subscriptions. | `model` | `GITHUB_COPILOT_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN`. If none are set, Finsight reads the OAuth token from `~/.config/github-copilot/apps.json` (written by the official VS Code / Neovim Copilot extensions when you sign in). |
-| `vertex` | Google Cloud Vertex AI Model Garden (Gemini family). | `model`, `project`, `location` | `GOOGLE_ACCESS_TOKEN` — usually `export GOOGLE_ACCESS_TOKEN=(gcloud auth print-access-token)` |
+| Provider             | Description                                                                                                  | Required config                | Credential (env)                                                                                                                                                                                                                 |
+| -------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `openai` _(default)_ | Any OpenAI-compatible `/chat/completions` API — OpenAI, Ollama, llama.cpp, vLLM, LM Studio, OpenRouter, etc. | `endpoint`, `model`            | `OPENAI_API_KEY` (or none for local servers)                                                                                                                                                                                     |
+| `copilot`            | GitHub Copilot chat. Works with personal, Business, and Enterprise subscriptions.                            | `model`                        | `GITHUB_COPILOT_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN`. If none are set, Finsight reads the OAuth token from `~/.config/github-copilot/apps.json` (written by the official VS Code / Neovim Copilot extensions when you sign in). |
+| `vertex`             | Google Cloud Vertex AI Model Garden (Gemini family).                                                         | `model`, `project`, `location` | `GOOGLE_ACCESS_TOKEN` — usually `export GOOGLE_ACCESS_TOKEN=(gcloud auth print-access-token)`                                                                                                                                    |
+| `gemini`             | Google AI Studio / Gemini API.                                                                               | `model`                        | `GEMINI_API_KEY` or `GOOGLE_API_KEY`                                                                                                                                                                                             |
+| `anthropic`          | Anthropic Claude via Messages API.                                                                           | `model`                        | `ANTHROPIC_API_KEY`                                                                                                                                                                                                              |
 
 **Secrets are never read from `config.yaml`.** Credentials are loaded from environment variables at startup. Lookup order (first non-empty wins):
 
@@ -277,21 +346,25 @@ Finsight supports three backends. Select one with `llm.provider`:
 
 **Copilot without signing in separately:** if you've already signed in to Copilot in VS Code or Neovim (`copilot.lua` / `copilot.vim`), Finsight picks up the OAuth token automatically from the shared `~/.config/github-copilot/apps.json` file. No extra setup.
 
+**Multi-agent mode:** set `llm.use_multi_agent: true` to route plain-English AI questions through the concurrent seven-role analysis path documented in [`docs/multi_agent_orchestration.md`](docs/multi_agent_orchestration.md).
+
 ### AI Command Window
 
 Press `a` from the watchlist, detail, or portfolio view to open an interactive prompt. Type plain English and embed **slash macros** to inject structured context into the LLM request. Output is rendered as markdown (headings, bullets, **tables**, code blocks) and is scrollable.
 
-| Macro | Effect |
-|---|---|
-| `/symbol:SYM` | Quote snapshot: price, day range, 52W range, valuation, volume, market cap |
-| `/range:1D\|1W\|1M\|6M\|1Y\|3Y\|5Y\|10Y` | Timeframe hint; applies to the chart summary in a following `/symbol` |
-| `/earning:SYM` | Latest financials, margins, analyst targets & recommendation (auto-fetch if missing) |
-| `/news:SYM` | Recent headlines (~2 week window, merged from Yahoo Finance + Google News RSS, cached 1h) |
-| `/portfolio` | Your whole portfolio table (weights, P/L, concentration) |
-| `/watchlist` | Current watchlist group as a markdown table |
-| `/help` | Built-in cheatsheet (no LLM call, no token usage) |
+| Macro                                    | Effect                                                                                    |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `/symbol:SYM`                            | Quote snapshot: price, day range, 52W range, valuation, volume, market cap                |
+| `/range:1D\|1W\|1M\|6M\|1Y\|3Y\|5Y\|10Y` | Timeframe hint; applies to the chart summary in a following `/symbol`                     |
+| `/earning:SYM`                           | Latest financials, margins, analyst targets & recommendation (auto-fetch if missing)      |
+| `/news:SYM`                              | Recent headlines (~2 week window, merged from Yahoo Finance + Google News RSS, cached 1h) |
+| `/portfolio`                             | Your whole portfolio table (weights, P/L, concentration)                                  |
+| `/watchlist`                             | Current watchlist group as a markdown table                                               |
+| `/help`                                  | Built-in cheatsheet (no LLM call, no token usage)                                         |
 
 **Autocomplete:** typing `/` opens a dropdown of macro names; `/symbol:`, `/earning:`, and `/news:` suggest tickers from your watchlist + portfolio; `/range:` suggests timeframes. Press `Tab` to accept. On a detail page, picking `/symbol`, `/earning`, or `/news` from the dropdown attaches the current ticker automatically.
+
+**Plain-English mode:** prompts without macros can use the tool-calling agent path automatically. Use `/ask` if you want to make that intent explicit.
 
 **Example prompts:**
 
@@ -367,11 +440,13 @@ Portfolio positions are private and stored separately from your watchlist to kee
 ```yaml
 portfolio:
   - symbol: NVDA
-    position: 25        # shares or contracts (fractional OK)
-    open_price: 712.40  # optional; blank = auto-fill from today's open
+    position: 25 # shares or contracts (fractional OK)
+    bought_at: 2026-04-30 # optional; defaults to the current date in-app
+    open_price: 712.40 # optional; blank = auto-fill from today's open
     note: long-term
   - symbol: AAPL
-    position: 40
+    position: 10 # in-app add defaults to 10
+    bought_at: 2026-04-30
     # open_price omitted — filled on first fetch
 ```
 
@@ -381,24 +456,24 @@ Tip: add `portfolio.yaml` and `~/.config/finsight/portfolio.yaml` to your `.giti
 
 ### Color Schemes
 
-| Name | Description |
-|------|-------------|
-| `default` | Original palette (TokyoNight-inspired) |
-| `tokyonight` | Faithful TokyoNight colors |
-| `catppuccin` | Catppuccin Mocha |
-| `dracula` | Dracula |
-| `nord` | Nord |
-| `gruvbox` | Gruvbox Dark |
-| `solarized` | Solarized Dark |
-| `ansi` | 16-color ANSI palette (works in any terminal) |
+| Name         | Description                                   |
+| ------------ | --------------------------------------------- |
+| `default`    | Original palette (TokyoNight-inspired)        |
+| `tokyonight` | Faithful TokyoNight colors                    |
+| `catppuccin` | Catppuccin Mocha                              |
+| `dracula`    | Dracula                                       |
+| `nord`       | Nord                                          |
+| `gruvbox`    | Gruvbox Dark                                  |
+| `solarized`  | Solarized Dark                                |
+| `ansi`       | 16-color ANSI palette (works in any terminal) |
 
 ### Chart styles
 
-| Style | Description |
-|-------|-------------|
+| Style                | Description                                   |
+| -------------------- | --------------------------------------------- |
 | `candlestick_dotted` | Braille-dot OHLC candles with wicks (default) |
-| `candlestick` | Block-character candlesticks |
-| `dotted_line` | Braille sparkline (line only) |
+| `candlestick`        | Block-character candlesticks                  |
+| `dotted_line`        | Braille sparkline (line only)                 |
 
 ## Data Source
 

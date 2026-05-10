@@ -36,6 +36,15 @@ func TestCacheQuotesRoundTrip(t *testing.T) {
 	if got[0].Symbol != "AAPL" || got[0].Price != 150.0 {
 		t.Errorf("quote mismatch: %+v", got[0])
 	}
+
+	subset := c.GetQuotes([]string{"AAPL"})
+	if subset == nil || len(subset) != 1 || subset[0].Symbol != "AAPL" {
+		t.Fatalf("expected AAPL-only subset, got %+v", subset)
+	}
+
+	if got := c.GetQuotes([]string{"AAPL", "GOOG"}); got != nil {
+		t.Fatalf("expected nil when one requested quote is missing, got %+v", got)
+	}
 }
 
 func TestCacheChartRoundTrip(t *testing.T) {
@@ -90,6 +99,17 @@ func TestCacheStaleQuotes(t *testing.T) {
 	if stale == nil {
 		t.Error("stale getter should return data")
 	}
+
+	c.PutQuotes([]yahoo.Quote{{Symbol: "MSFT", Price: 300.0}})
+
+	subset := c.GetQuotesStale([]string{"AAPL"})
+	if subset == nil || len(subset) != 1 || subset[0].Symbol != "AAPL" {
+		t.Fatalf("expected stale AAPL-only subset, got %+v", subset)
+	}
+
+	if got := c.GetQuotesStale([]string{"AAPL", "GOOG"}); got != nil {
+		t.Fatalf("expected stale miss when one requested quote is missing, got %+v", got)
+	}
 }
 
 func TestCacheInvalidate(t *testing.T) {
@@ -102,16 +122,23 @@ func TestCacheInvalidate(t *testing.T) {
 	chart := &yahoo.ChartData{
 		Closes: []float64{100, 101, 102},
 	}
+	c.PutQuotes([]yahoo.Quote{{Symbol: "AAPL", Price: 150}})
 	c.PutChart("AAPL", "1d", "5m", chart)
 
 	if c.GetChart("AAPL", "1d", "5m") == nil {
 		t.Fatal("expected cached chart before invalidate")
+	}
+	if got := c.GetQuotesStale([]string{"AAPL"}); len(got) != 1 {
+		t.Fatal("expected cached quote before invalidate")
 	}
 
 	c.Invalidate("AAPL")
 
 	if c.GetChartStale("AAPL", "1d", "5m") != nil {
 		t.Error("expected nil after invalidate")
+	}
+	if got := c.GetQuotesStale([]string{"AAPL"}); got != nil {
+		t.Error("expected quote cache miss after invalidate")
 	}
 }
 

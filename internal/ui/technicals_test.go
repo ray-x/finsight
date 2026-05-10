@@ -2,6 +2,7 @@ package ui
 
 import (
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/ray-x/finsight/internal/yahoo"
@@ -84,5 +85,60 @@ func TestComputeTechnicalsContextOverlapIgnored(t *testing.T) {
 	out := ComputeTechnicalsWithContext(primary, ctx)
 	if len(out.SMA20) != 3 {
 		t.Fatalf("output length = %d want 3", len(out.SMA20))
+	}
+}
+
+func TestComputeTechnicalsBollingerMidMatchesSMA20(t *testing.T) {
+	cd := &yahoo.ChartData{
+		Closes: make([]float64, 30),
+		Highs:  make([]float64, 30),
+		Lows:   make([]float64, 30),
+	}
+	for i := range cd.Closes {
+		cd.Closes[i] = 100 + float64(i)
+		cd.Highs[i] = cd.Closes[i] + 1
+		cd.Lows[i] = cd.Closes[i] - 1
+	}
+
+	tch := ComputeTechnicals(cd)
+	last := len(tch.SMA20) - 1
+	if math.IsNaN(tch.BBMid[last]) {
+		t.Fatal("expected valid Bollinger mid value")
+	}
+	if math.Abs(tch.BBMid[last]-tch.SMA20[last]) > 1e-9 {
+		t.Fatalf("expected Bollinger mid to equal SMA20, got bbMid=%v sma20=%v", tch.BBMid[last], tch.SMA20[last])
+	}
+}
+
+func TestDeriveBollingerStrategyDetectsBreakoutLong(t *testing.T) {
+	tch := &Technicals{
+		Closes:  []float64{100, 106},
+		BBUpper: []float64{105, 105},
+		BBMid:   []float64{100, 101},
+		BBLower: []float64{95, 97},
+	}
+
+	got := deriveBollingerStrategy(tch)
+	if got.label != "breakout long" {
+		t.Fatalf("expected breakout long, got %+v", got)
+	}
+	if got.bias != 1 {
+		t.Fatalf("expected bullish bias, got %+v", got)
+	}
+}
+
+func TestRenderBollingerStrategyLineShowsSMA20Basis(t *testing.T) {
+	tch := &Technicals{
+		Closes:  []float64{100, 104},
+		BBUpper: []float64{105, 105},
+		BBMid:   []float64{100, 101},
+		BBLower: []float64{95, 97},
+	}
+
+	line := renderBollingerStrategyLine(tch, 120)
+	for _, want := range []string{"BB Strat", "20-SMA basis"} {
+		if !strings.Contains(line, want) {
+			t.Fatalf("expected line to contain %q, got %q", want, line)
+		}
 	}
 }

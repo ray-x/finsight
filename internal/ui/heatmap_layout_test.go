@@ -195,6 +195,31 @@ func TestBuildYahooQuoteHeatmapDoesNotUseVolumeForSizingFallback(t *testing.T) {
 	}
 }
 
+func TestBuildWatchlistHeatmapUsesSmallFallbackForMissingCap(t *testing.T) {
+	hm := NewHeatmapModel()
+	hm.BuildWatchlistHeatmap([]WatchlistItem{
+		{Symbol: "BIGCAP", Quote: &yahoo.Quote{Symbol: "BIGCAP", Price: 100, PreviousClose: 95, MarketCap: 3000}},
+		{Symbol: "SMALLCAP", Quote: &yahoo.Quote{Symbol: "SMALLCAP", Price: 50, PreviousClose: 49, MarketCap: 1000}},
+		{Symbol: "NOCAP", Quote: &yahoo.Quote{Symbol: "NOCAP", Price: 10, PreviousClose: 10, MarketCap: 0}},
+	})
+
+	if len(hm.Items) != 3 {
+		t.Fatalf("expected 3 items, got %d", len(hm.Items))
+	}
+
+	vals := map[string]float64{}
+	for _, it := range hm.Items {
+		vals[it.Label] = it.Value
+	}
+
+	if vals["BIGCAP"] <= vals["SMALLCAP"] {
+		t.Fatalf("expected BIGCAP value > SMALLCAP value, got BIGCAP=%.2f SMALLCAP=%.2f", vals["BIGCAP"], vals["SMALLCAP"])
+	}
+	if vals["NOCAP"] >= vals["SMALLCAP"] {
+		t.Fatalf("expected no-cap fallback to stay small, got NOCAP=%.2f SMALLCAP=%.2f", vals["NOCAP"], vals["SMALLCAP"])
+	}
+}
+
 func TestBuildPortfolioHeatmapDefaultsToMarketValue(t *testing.T) {
 	hm := NewHeatmapModel()
 	hm.BuildPortfolioHeatmap([]PortfolioItem{

@@ -16,22 +16,15 @@ type HeatmapType int
 
 const (
 	HeatmapPortfolio HeatmapType = iota
-	HeatmapVolume
-	HeatmapSector
 	HeatmapMostActive
 	HeatmapTrendNow
 	HeatmapWatchlist
-	heatmapTypeCount
 )
 
 func heatmapTypeName(kind HeatmapType) string {
 	switch kind {
 	case HeatmapPortfolio:
 		return "portfolio"
-	case HeatmapVolume:
-		return "volume"
-	case HeatmapSector:
-		return "sector"
 	case HeatmapMostActive:
 		return "most_active"
 	case HeatmapTrendNow:
@@ -69,13 +62,6 @@ func portfolioHeatmapScaleLabel(scale PortfolioHeatmapScale) string {
 	}
 }
 
-// HeatmapFilter represents filter criteria for heatmap items.
-type HeatmapFilter struct {
-	MinChange float64
-	MaxChange float64
-	MinVolume float64
-}
-
 // HeatmapItem represents a single heatmap cell (symbol or sector).
 type HeatmapItem struct {
 	Label    string  // Symbol or sector name
@@ -93,7 +79,6 @@ type HeatmapModel struct {
 	Loading        bool
 	SortBy         SortBy
 	PortfolioScale PortfolioHeatmapScale
-	Filter         HeatmapFilter
 	SelectedIdx    int
 	SelectedLabel  string // For returning to selected item after mode switch
 }
@@ -110,6 +95,34 @@ func NewHeatmapModel() HeatmapModel {
 		SelectedIdx:    0,
 		SelectedLabel:  "",
 	}
+}
+
+func quoteChangePercent(q *yahoo.Quote) float64 {
+	if q == nil {
+		return 0
+	}
+	change := q.ChangePercent
+	if change == 0 {
+		change = q.Change
+	}
+	if q.Price != 0 && q.PreviousClose != 0 {
+		change = ((q.Price - q.PreviousClose) / q.PreviousClose) * 100
+	}
+	return change
+}
+
+func heatmapSizingValueByMarketCap(cap int64, fallbackMinCap float64) float64 {
+	value := float64(cap)
+	if value <= 0 {
+		if fallbackMinCap <= 0 || !isFinite(fallbackMinCap) {
+			fallbackMinCap = 1
+		}
+		value = fallbackMinCap * 0.1
+	}
+	if value <= 0 {
+		value = 1
+	}
+	return value
 }
 
 // BuildPortfolioHeatmap builds heatmap items from portfolio items.
@@ -130,51 +143,13 @@ func (hm *HeatmapModel) BuildPortfolioHeatmap(items []PortfolioItem) {
 		if value <= 0 {
 			continue
 		}
-		change := pi.Quote.Change
-		if pi.Quote.Price != 0 && pi.Quote.PreviousClose != 0 {
-			change = ((pi.Quote.Price - pi.Quote.PreviousClose) / pi.Quote.PreviousClose) * 100
-		}
 
 		hm.Items = append(hm.Items, HeatmapItem{
 			Label:    pi.Symbol,
 			Value:    value,
-			Change:   change,
+			Change:   quoteChangePercent(pi.Quote),
 			Quote:    pi.Quote,
 			Selected: pi.Symbol == hm.SelectedLabel,
-		})
-	}
-
-	hm.applySorting()
-	hm.findSelectedIndex()
-}
-
-// BuildVolumeHeatmap builds heatmap items from watchlist items, sized by volume.
-func (hm *HeatmapModel) BuildVolumeHeatmap(items []WatchlistItem) {
-	hm.Type = HeatmapVolume
-	hm.Loading = false
-	hm.Items = []HeatmapItem{}
-
-	for _, wi := range items {
-		if wi.Quote == nil {
-			continue
-		}
-
-		change := wi.Quote.Change
-		if wi.Quote.Price != 0 && wi.Quote.PreviousClose != 0 {
-			change = ((wi.Quote.Price - wi.Quote.PreviousClose) / wi.Quote.PreviousClose) * 100
-		}
-
-		volume := float64(wi.Quote.Volume)
-		if volume == 0 {
-			continue // Skip items with no volume data
-		}
-
-		hm.Items = append(hm.Items, HeatmapItem{
-			Label:    wi.Symbol,
-			Value:    volume,
-			Change:   change,
-			Quote:    wi.Quote,
-			Selected: wi.Symbol == hm.SelectedLabel,
 		})
 	}
 
@@ -205,22 +180,15 @@ func (hm *HeatmapModel) BuildWatchlistHeatmap(items []WatchlistItem) {
 		if wi.Quote == nil {
 			continue
 		}
-
-		change := wi.Quote.Change
-		if wi.Quote.Price != 0 && wi.Quote.PreviousClose != 0 {
-			change = ((wi.Quote.Price - wi.Quote.PreviousClose) / wi.Quote.PreviousClose) * 100
-		}
-
-		value := float64(wi.Quote.MarketCap)
-		if value <= 0 {
+		value := heatmapSizingValueByMarketCap(wi.Quote.MarketCap, minCap)
+		if wi.Quote.MarketCap <= 0 {
 			missingCap++
-			value = minCap * 0.1
 		}
 
 		hm.Items = append(hm.Items, HeatmapItem{
 			Label:    wi.Symbol,
 			Value:    value,
-			Change:   change,
+			Change:   quoteChangePercent(wi.Quote),
 			Quote:    wi.Quote,
 			Selected: wi.Symbol == hm.SelectedLabel,
 		})
@@ -229,84 +197,6 @@ func (hm *HeatmapModel) BuildWatchlistHeatmap(items []WatchlistItem) {
 	hm.applySorting()
 	hm.findSelectedIndex()
 	logger.Log("heatmap: build type=watchlist items=%d missing_cap=%d", len(hm.Items), missingCap)
-}
-
-// BuildSectorHeatmap builds heatmap items aggregated by sector (simplified: group by exchange/letter).
-func (hm *HeatmapModel) BuildSectorHeatmap(items []WatchlistItem) {
-	hm.Type = HeatmapSector
-	hm.Loading = false
-	hm.Items = []HeatmapItem{}
-
-	sectorMap := make(map[string]*struct {
-		value      float64
-		changes    []float64
-		quoteCount int
-		quotes     []*yahoo.Quote
-	})
-
-	for _, wi := range items {
-		if wi.Quote == nil {
-			continue
-		}
-
-		// Simple categorization: use symbol suffix as sector
-		// (e.g., .AX -> Australia, .T -> Japan, no suffix -> US)
-		sector := "US"
-		if len(wi.Symbol) > 2 && wi.Symbol[len(wi.Symbol)-2] == '.' {
-			sector = wi.Symbol[len(wi.Symbol)-1:]
-		}
-
-		if sectorMap[sector] == nil {
-			sectorMap[sector] = &struct {
-				value      float64
-				changes    []float64
-				quoteCount int
-				quotes     []*yahoo.Quote
-			}{
-				value:   0,
-				changes: []float64{},
-				quotes:  []*yahoo.Quote{},
-			}
-		}
-
-		volume := float64(wi.Quote.Volume)
-		if volume == 0 {
-			volume = 1 // Minimum weight for items with no volume
-		}
-
-		change := wi.Quote.Change
-		if wi.Quote.Price != 0 && wi.Quote.PreviousClose != 0 {
-			change = ((wi.Quote.Price - wi.Quote.PreviousClose) / wi.Quote.PreviousClose) * 100
-		}
-
-		sectorMap[sector].value += volume
-		sectorMap[sector].changes = append(sectorMap[sector].changes, change)
-		sectorMap[sector].quoteCount++
-		sectorMap[sector].quotes = append(sectorMap[sector].quotes, wi.Quote)
-	}
-
-	// Convert sector map to items with average change
-	for sectorName, data := range sectorMap {
-		avgChange := 0.0
-		if len(data.changes) > 0 {
-			sum := 0.0
-			for _, c := range data.changes {
-				sum += c
-			}
-			avgChange = sum / float64(len(data.changes))
-		}
-
-		hm.Items = append(hm.Items, HeatmapItem{
-			Label:    sectorName + " Sector",
-			Value:    data.value,
-			Change:   avgChange,
-			Quote:    data.quotes[0], // Use first quote for styling
-			Selected: sectorName == hm.SelectedLabel,
-		})
-	}
-
-	hm.applySorting()
-	hm.findSelectedIndex()
 }
 
 // BuildYahooQuoteHeatmap builds items from Yahoo quote lists like Most Active and Trend Now.
@@ -335,27 +225,18 @@ func (hm *HeatmapModel) BuildYahooQuoteHeatmap(kind HeatmapType, quotes []yahoo.
 		if strings.TrimSpace(q.Symbol) == "" {
 			continue
 		}
-		change := q.ChangePercent
-		if q.Price != 0 && q.PreviousClose != 0 {
-			change = ((q.Price - q.PreviousClose) / q.PreviousClose) * 100
-		}
-
 		// Use market cap for proportional sizing (larger cap = larger box).
 		// If a symbol has no market cap from Yahoo, keep it small instead of
 		// switching to volume (which can distort relative sizes badly).
-		value := float64(q.MarketCap)
-		if value <= 0 {
+		value := heatmapSizingValueByMarketCap(q.MarketCap, minCap)
+		if q.MarketCap <= 0 {
 			missingCapFallback++
-			value = minCap * 0.1
-		}
-		if value <= 0 {
-			value = 1
 		}
 
 		hm.Items = append(hm.Items, HeatmapItem{
 			Label:    q.Symbol,
 			Value:    value,
-			Change:   change,
+			Change:   quoteChangePercent(&q),
 			Quote:    &q,
 			Selected: q.Symbol == hm.SelectedLabel,
 		})
@@ -586,10 +467,6 @@ func (m Model) RenderHeatmap(hm *HeatmapModel, width, height int) string {
 	switch hm.Type {
 	case HeatmapPortfolio:
 		heatmapTypeLabel = "Portfolio Allocation · Size: " + portfolioHeatmapScaleLabel(hm.PortfolioScale)
-	case HeatmapVolume:
-		heatmapTypeLabel = "Market Volume"
-	case HeatmapSector:
-		heatmapTypeLabel = "Sector Overview"
 	case HeatmapMostActive:
 		heatmapTypeLabel = "Most Active"
 	case HeatmapTrendNow:
@@ -1430,7 +1307,6 @@ func renderHeatmapHelp(hm *HeatmapModel) string {
 	if hm != nil && hm.Type == HeatmapPortfolio {
 		help += hintKey("V", "alue mode  ")
 	}
-	help += hintKey("F", "ilter  ")
 	help += hintKey("E", "nter  ")
 	help += hintKey("W", "atchlist  ")
 	help += hintKey("P", "ortfolio  ")

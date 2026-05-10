@@ -141,6 +141,89 @@ func TestInitialState(t *testing.T) {
 	}
 }
 
+func TestHeatmapWatchlistQuotesRebuildAddsMissingSymbols(t *testing.T) {
+	c, err := cache.New(t.TempDir())
+	if err != nil {
+		t.Fatalf("new cache: %v", err)
+	}
+
+	m := newTestModel()
+	m.cfg.Watchlists = []config.WatchlistGroup{
+		{Name: "Active", Symbols: []config.WatchItem{{Symbol: "AAPL", Name: "Apple"}}},
+		{Name: "Other", Symbols: []config.WatchItem{{Symbol: "MSFT", Name: "Microsoft"}}},
+	}
+	m.items = []WatchlistItem{{
+		Symbol: "AAPL",
+		Name:   "Apple",
+		Quote:  &yahoo.Quote{Symbol: "AAPL", Price: 100, PreviousClose: 95, MarketCap: 1000},
+	}}
+	m.cache = c
+	m.heatmap = NewHeatmapModel()
+	m.heatmap.BuildWatchlistHeatmap(m.allWatchlistItems())
+
+	nm, _ := m.handleHeatmapWatchlistQuotes(heatmapWatchlistQuotesMsg{
+		quotes: []yahoo.Quote{{Symbol: "MSFT", Price: 200, PreviousClose: 190, MarketCap: 2000}},
+	})
+	m = asModel(nm)
+
+	if len(m.heatmap.Items) != 2 {
+		t.Fatalf("expected 2 heatmap items after rebuild, got %d", len(m.heatmap.Items))
+	}
+	found := false
+	for _, it := range m.heatmap.Items {
+		if it.Label == "MSFT" && it.Quote != nil && it.Quote.Symbol == "MSFT" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected fetched inactive-group symbol to be added to heatmap")
+	}
+}
+
+func TestAllWatchlistItemsWithQuotesPrefersFreshQuotesOverStaleCache(t *testing.T) {
+	c, err := cache.New(t.TempDir())
+	if err != nil {
+		t.Fatalf("new cache: %v", err)
+	}
+	c.PutQuotes([]yahoo.Quote{{Symbol: "MSFT", Price: 150, PreviousClose: 145, MarketCap: 1000}})
+
+	m := newTestModel()
+	m.cfg.Watchlists = []config.WatchlistGroup{
+		{Name: "Active", Symbols: []config.WatchItem{{Symbol: "AAPL", Name: "Apple"}}},
+		{Name: "Other", Symbols: []config.WatchItem{{Symbol: "MSFT", Name: "Microsoft"}}},
+	}
+	m.items = []WatchlistItem{{
+		Symbol: "AAPL",
+		Name:   "Apple",
+		Quote:  &yahoo.Quote{Symbol: "AAPL", Price: 100, PreviousClose: 95, MarketCap: 2000},
+	}}
+	m.cache = c
+
+	items := m.allWatchlistItemsWithQuotes(map[string]yahoo.Quote{
+		"MSFT": {Symbol: "MSFT", Price: 300, PreviousClose: 290, MarketCap: 2500},
+	})
+
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(items))
+	}
+
+	for _, it := range items {
+		if it.Symbol != "MSFT" {
+			continue
+		}
+		if it.Quote == nil {
+			t.Fatal("expected MSFT quote to be populated")
+		}
+		if it.Quote.Price != 300 {
+			t.Fatalf("expected fresh quote to win over stale cache, got %.2f", it.Quote.Price)
+		}
+		return
+	}
+
+	t.Fatal("expected MSFT item in merged watchlist")
+}
+
 func TestQuitKey(t *testing.T) {
 	m := newTestModel()
 	updated, cmd := m.Update(keyMsg("ctrl+c"))
@@ -718,6 +801,38 @@ func TestDetailMarketDepthPopup(t *testing.T) {
 	model = asModel(updated)
 	if model.showMarketDepth {
 		t.Error("expected showMarketDepth=false after esc")
+	}
+}
+
+func TestDetailBollingerToggleSwitchesOverlayMode(t *testing.T) {
+	m := newTestModel()
+	m.mode = viewDetail
+	m.showTechnicals = true
+	m.technicalOverlayMode = TechnicalOverlayMA
+
+	updated, _ := m.Update(keyMsg("B"))
+	model := asModel(updated)
+	if model.technicalOverlayMode != TechnicalOverlayBollinger {
+		t.Fatalf("expected Bollinger overlay mode, got %v", model.technicalOverlayMode)
+	}
+
+	updated, _ = model.Update(keyMsg("B"))
+	model = asModel(updated)
+	if model.technicalOverlayMode != TechnicalOverlayMA {
+		t.Fatalf("expected MA overlay mode after second toggle, got %v", model.technicalOverlayMode)
+	}
+}
+
+func TestDetailBollingerToggleIgnoredWhenTechnicalsHidden(t *testing.T) {
+	m := newTestModel()
+	m.mode = viewDetail
+	m.showTechnicals = false
+	m.technicalOverlayMode = TechnicalOverlayMA
+
+	updated, _ := m.Update(keyMsg("B"))
+	model := asModel(updated)
+	if model.technicalOverlayMode != TechnicalOverlayMA {
+		t.Fatalf("expected overlay mode unchanged when technicals hidden, got %v", model.technicalOverlayMode)
 	}
 }
 

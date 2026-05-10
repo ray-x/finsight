@@ -44,8 +44,8 @@ type Cache struct {
 }
 
 type quoteCacheEntry struct {
-	Quotes    []yahoo.Quote `json:"quotes"`
-	FetchedAt time.Time     `json:"fetched_at"`
+	Quote     yahoo.Quote `json:"quote"`
+	FetchedAt time.Time   `json:"fetched_at"`
 }
 
 type chartCacheEntry struct {
@@ -77,56 +77,43 @@ func DefaultDir() string {
 
 // GetQuotes returns cached quotes if fresh, nil otherwise.
 func (c *Cache) GetQuotes(symbols []string) []yahoo.Quote {
-	key := "quotes.json"
-	path := filepath.Join(c.dir, key)
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil
+	result := make([]yahoo.Quote, 0, len(symbols))
+	for _, symbol := range symbols {
+		entry, ok := c.readQuoteEntry(symbol)
+		if !ok || time.Since(entry.FetchedAt) > cacheTTL {
+			return nil
+		}
+		result = append(result, entry.Quote)
 	}
-
-	var entry quoteCacheEntry
-	if err := json.Unmarshal(data, &entry); err != nil {
-		return nil
-	}
-
-	if time.Since(entry.FetchedAt) > cacheTTL {
-		return nil
-	}
-
-	return entry.Quotes
+	return result
 }
 
 // GetQuotesStale returns cached quotes regardless of age, nil if no cache exists.
 func (c *Cache) GetQuotesStale(symbols []string) []yahoo.Quote {
-	key := "quotes.json"
-	path := filepath.Join(c.dir, key)
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil
+	result := make([]yahoo.Quote, 0, len(symbols))
+	for _, symbol := range symbols {
+		entry, ok := c.readQuoteEntry(symbol)
+		if !ok {
+			return nil
+		}
+		result = append(result, entry.Quote)
 	}
-
-	var entry quoteCacheEntry
-	if err := json.Unmarshal(data, &entry); err != nil {
-		return nil
-	}
-
-	return entry.Quotes
+	return result
 }
 
 // PutQuotes caches quotes.
 func (c *Cache) PutQuotes(quotes []yahoo.Quote) {
-	entry := quoteCacheEntry{
-		Quotes:    quotes,
-		FetchedAt: time.Now(),
+	for _, quote := range quotes {
+		entry := quoteCacheEntry{
+			Quote:     quote,
+			FetchedAt: time.Now(),
+		}
+		data, err := json.Marshal(entry)
+		if err != nil {
+			continue
+		}
+		_ = os.WriteFile(c.quoteCachePath(quote.Symbol), data, 0644)
 	}
-	data, err := json.Marshal(entry)
-	if err != nil {
-		return
-	}
-	path := filepath.Join(c.dir, "quotes.json")
-	_ = os.WriteFile(path, data, 0644)
 }
 
 // GetChart returns cached chart data if fresh, nil otherwise.
@@ -196,7 +183,28 @@ func (c *Cache) Invalidate(symbol string) {
 			_ = os.Remove(filepath.Join(c.dir, e.Name()))
 		}
 	}
+	// Remove the legacy global quotes cache if present.
 	_ = os.Remove(filepath.Join(c.dir, "quotes.json"))
+}
+
+func (c *Cache) quoteCachePath(symbol string) string {
+	return filepath.Join(c.dir, sanitizeKey(symbol)+"_quote.json")
+}
+
+func (c *Cache) readQuoteEntry(symbol string) (quoteCacheEntry, bool) {
+	data, err := os.ReadFile(c.quoteCachePath(symbol))
+	if err != nil {
+		return quoteCacheEntry{}, false
+	}
+
+	var entry quoteCacheEntry
+	if err := json.Unmarshal(data, &entry); err != nil {
+		return quoteCacheEntry{}, false
+	}
+	if entry.Quote.Symbol == "" {
+		return quoteCacheEntry{}, false
+	}
+	return entry, true
 }
 
 func sanitizeKey(s string) string {
