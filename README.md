@@ -6,7 +6,7 @@
 
 Finsight is a terminal-native market workstation for tracking symbols, reviewing charts and fundamentals, monitoring earnings/news, managing a private portfolio, and asking AI-driven questions without leaving the shell.
 
-<img width="1200"  alt="image" src="https://gist.github.com/user-attachments/assets/aec9dbbe-198b-4bb6-9829-117fdbbcd1bb.png" />
+<img width="1200"  alt="image" src="https://gist.github.com/user-attachments/assets/de53fe89-8bfb-4eee-9bc3-d8f64a3670f1.jpg" />
 
 <img width="1200"  alt="image" src="https://gist.github.com/user-attachments/assets/24be820a-d7d5-436d-8ad4-055c6ae7b834.png" />
 
