@@ -6,9 +6,7 @@
 
 Finsight is a terminal-native market workstation for tracking symbols, reviewing charts and fundamentals, monitoring earnings/news, managing a private portfolio, and asking AI-driven questions without leaving the shell.
 
-<img width="1200"  alt="image" src="https://gist.github.com/user-attachments/assets/de53fe89-8bfb-4eee-9bc3-d8f64a3670f1.jpeg" />
-
-<img width="1200"  alt="image" src="https://gist.github.com/user-attachments/assets/24be820a-d7d5-436d-8ad4-055c6ae7b834.png" />
+<img width="1200" alt="techview" src="https://github.com/user-attachments/assets/c8d065f0-d976-448e-9137-daec86d22038" />
 
 Built with Go on top of [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss), it combines a fast TUI with local caching, SQLite persistence, multi-provider LLM support, and an agentic prompt flow that can pull quotes, technicals, earnings, news, and portfolio context on demand.
 
@@ -44,6 +42,8 @@ Built with Go on top of [Bubble Tea](https://github.com/charmbracelet/bubbletea)
 
 ### Portfolio and heatmap
 
+<img width="1200" alt="heatmap" src="https://github.com/user-attachments/assets/219a9814-744d-4e88-bc79-0dc612b044a2" />
+
 - **Private portfolio storage** — positions live separately from shared watchlist config
 - **In-app add/edit form** — new positions default to quantity `10` and today's `bought_at` date, both editable before saving
 - **Auto cost basis fill** — leave `open_price` empty and Finsight can seed it from today’s open on first fetch
@@ -54,7 +54,7 @@ Built with Go on top of [Bubble Tea](https://github.com/charmbracelet/bubbletea)
 
 ### AI command window
 
-<img width="1200" alt="image" src="https://gist.github.com/user-attachments/assets/fcf4892e-9493-4134-98c4-e992b1f15124.png" />
+<img width="2354" height="1394" alt="TSLA_analysis" src="https://github.com/user-attachments/assets/19a59499-35e2-4a96-817f-0e331c9b81cb" />
 
 - **Natural-language and macro-driven prompts** — use plain English, slash commands, or mix both
 - **Context macros** — `/symbol`, `/range`, `/earning`, `/news`, `/portfolio`, `/watchlist`, `/help`
@@ -66,6 +66,8 @@ Built with Go on top of [Bubble Tea](https://github.com/charmbracelet/bubbletea)
 - **Markdown output** — scrollable rendered tables, headings, lists, and code blocks inside the TUI
 
 ### Data, earnings, and integrations
+
+<img width="2396" height="1584" alt="earning_mu" src="https://github.com/user-attachments/assets/2c6e4b25-7a21-4f52-8168-c2cbc7cdbabf" />
 
 - **Three-phase earnings ingestion** — company IR detection, EDGAR confirmation, and Yahoo normalization/backfill
 - **Local cache + SQLite persistence** — quotes, chart bars, filings, reports, and text cache stored locally
