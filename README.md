@@ -6,9 +6,9 @@
 
 Finsight is a terminal-native market workstation for tracking symbols, reviewing charts and fundamentals, monitoring earnings/news, managing a private portfolio, and asking AI-driven questions without leaving the shell.
 
-<img width="1200"  alt="image" src="https://gist.github.com/user-attachments/assets/aec9dbbe-198b-4bb6-9829-117fdbbcd1bb" />
+<img width="1200"  alt="image" src="https://gist.github.com/user-attachments/assets/aec9dbbe-198b-4bb6-9829-117fdbbcd1bb.png" />
 
-<img width="1200"  alt="image" src="https://gist.github.com/user-attachments/assets/24be820a-d7d5-436d-8ad4-055c6ae7b834" />
+<img width="1200"  alt="image" src="https://gist.github.com/user-attachments/assets/24be820a-d7d5-436d-8ad4-055c6ae7b834.png" />
 
 Built with Go on top of [Bubble Tea](https://github.com/charmbracelet/bubbletea) and [Lip Gloss](https://github.com/charmbracelet/lipgloss), it combines a fast TUI with local caching, SQLite persistence, multi-provider LLM support, and an agentic prompt flow that can pull quotes, technicals, earnings, news, and portfolio context on demand.
 
@@ -54,7 +54,7 @@ Built with Go on top of [Bubble Tea](https://github.com/charmbracelet/bubbletea)
 
 ### AI command window
 
-<img width="1200" alt="image" src="https://gist.github.com/user-attachments/assets/fcf4892e-9493-4134-98c4-e992b1f15124" />
+<img width="1200" alt="image" src="https://gist.github.com/user-attachments/assets/fcf4892e-9493-4134-98c4-e992b1f15124.png" />
 
 - **Natural-language and macro-driven prompts** — use plain English, slash commands, or mix both
 - **Context macros** — `/symbol`, `/range`, `/earning`, `/news`, `/portfolio`, `/watchlist`, `/help`
